@@ -1,191 +1,415 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Pose Detector</title>
-
-  <!-- TensorFlow.js -->
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.8.0"></script>
-
-  <!-- MoveNet Lightning (correct model) -->
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose"></script>
-
+  <meta charset="utf-8" />
+  <title>Dual-View MoveNet Analyzer — angles, best-view, normalization</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <style>
-    body { font-family: Arial; margin: 20px; }
-    .row { display: flex; gap: 20px; }
-    img, canvas { width: 350px; border: 1px solid #ccc; }
-    table { margin-top: 20px; border-collapse: collapse; }
-    td, th { border: 1px solid #444; padding: 6px 10px; }
+    body{font-family:Inter,system-ui,Arial;margin:18px;color:#111}
+    h1{font-size:20px;margin-bottom:6px}
+    .row{display:flex;gap:12px;flex-wrap:wrap}
+    .card{border:1px solid #e6e6e6;padding:12px;border-radius:8px;background:#fafafa; min-width:320px}
+    label{display:block;margin-bottom:6px;font-weight:600}
+    input[type=file]{display:block;margin-bottom:8px}
+    canvas{background:#111;border-radius:6px;max-width:100%}
+    table{width:100%;border-collapse:collapse;margin-top:8px}
+    th,td{padding:6px 8px;border:1px solid #eee;text-align:left;font-size:13px}
+    .small{font-size:13px;color:#666}
+    button{background:#0b6ef0;color:#fff;border:none;padding:8px 12px;border-radius:6px;cursor:pointer}
+    pre{background:#f7f7f7;padding:8px;border-radius:6px;overflow:auto;max-height:260px}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
   </style>
 </head>
 <body>
+  <h1>Dual-View MoveNet Analyzer</h1>
 
-<h2>Pose Estimator (Front + Side)</h2>
+  <div class="row">
+    <div class="card">
+      <label>Front view image (facing camera)</label>
+      <input id="frontFile" type="file" accept="image/*">
+      <label>Side view image (profile)</label>
+      <input id="sideFile" type="file" accept="image/*">
+      <div style="margin-top:8px">
+        <button id="runBtn">Run detection</button>
+        <span id="status" class="small" style="margin-left:12px"></span>
+      </div>
+      <div style="margin-top:8px" class="small">
+        Confidence threshold: <strong id="confVal">0.30</strong>
+      </div>
+    </div>
 
-<div>
-  <p><b>Upload Front View:</b></p>
-  <input type="file" id="frontInput" accept="image/*">
-  <br><br>
-  <p><b>Upload Side View:</b></p>
-  <input type="file" id="sideInput" accept="image/*">
-</div>
-
-<br>
-<button id="runBtn">Run Detection</button>
-
-<h3>Results</h3>
-
-<div class="row">
-  <div>
-    <h4>Front</h4>
-    <img id="frontImg">
-    <canvas id="frontCanvas"></canvas>
+    <div class="card small">
+      This runs <strong>in-browser</strong> with MoveNet (tfjs). It pads images to square (no squeezing) and draws keypoints & skeleton on the padded canvas. Angles are computed in each view and the best view is selected per-angle by confidence.
+    </div>
   </div>
 
-  <div>
-    <h4>Side</h4>
-    <img id="sideImg">
-    <canvas id="sideCanvas"></canvas>
+  <hr/>
+
+  <div class="grid">
+    <div class="card">
+      <h3 style="margin-top:0">Front — padded canvas</h3>
+      <canvas id="frontCanvas" width="512" height="512"></canvas>
+      <div id="frontInfo" class="small"></div>
+    </div>
+
+    <div class="card">
+      <h3 style="margin-top:0">Side — padded canvas</h3>
+      <canvas id="sideCanvas" width="512" height="512"></canvas>
+      <div id="sideInfo" class="small"></div>
+    </div>
   </div>
-</div>
 
-<h3>Keypoint Table</h3>
-<table id="keyTable"></table>
+  <div class="card" style="margin-top:12px">
+    <h3 style="margin:0">Angle table (front vs side, chosen)</h3>
+    <div id="anglesTable" class="small"></div>
+  </div>
 
-<script>
-/* ------------------- LOAD MODEL ------------------- */
-let detector;
+  <div class="card" style="margin-top:12px">
+    <h3 style="margin:0">Keypoints (normalized & pixel coords)</h3>
+    <div style="display:flex;gap:12px;margin-top:8px">
+      <div style="flex:1">
+        <strong>Front</strong>
+        <pre id="frontKP"></pre>
+      </div>
+      <div style="flex:1">
+        <strong>Side</strong>
+        <pre id="sideKP"></pre>
+      </div>
+    </div>
+  </div>
 
-async function loadModel() {
-  detector = await poseDetection.createDetector(
-    poseDetection.SupportedModels.MoveNet,
-    { modelType: poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING }
-  );
-  console.log("MoveNet Loaded");
-}
-loadModel();
+  <!-- TFJS + pose-detection -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.11.0/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@0.0.9/dist/pose-detection.min.js"></script>
+  <script>
+  // -------------- Config & names ----------------
+  const MODEL = poseDetection.SupportedModels.MoveNet;
+  // THUNDER is more accurate but heavier; change to LIGHTNING if you want speed
+  const MODEL_CONFIG = { modelType: poseDetection.movenet.modelType.THUNDER };
 
-/* ------------ Load images into <img> elements ------------ */
-function loadImage(input, imgElement) {
-  input.addEventListener("change", () => {
-    const file = input.files[0];
-    imgElement.src = URL.createObjectURL(file);
-  });
-}
-
-loadImage(document.getElementById("frontInput"), document.getElementById("frontImg"));
-loadImage(document.getElementById("sideInput"), document.getElementById("sideImg"));
-
-/* ------------------- Draw Skeleton ------------------- */
-function drawSkeleton(ctx, keypoints) {
-  const edges = [
-    [0,1], [1,3], [0,2], [2,4],     // eyes, ears
-    [5,7], [7,9],                   // left arm
-    [6,8], [8,10],                  // right arm
-    [5,6],                          // shoulders
-    [5,11], [6,12],                 // torso
-    [11,12],
-    [11,13], [13,15],               // left leg
-    [12,14], [14,16]                // right leg
+  const KP_NAMES = [
+    "nose","left_eye","right_eye","left_ear","right_ear",
+    "left_shoulder","right_shoulder","left_elbow","right_elbow",
+    "left_wrist","right_wrist","left_hip","right_hip",
+    "left_knee","right_knee","left_ankle","right_ankle"
   ];
 
-  ctx.fillStyle = "red";
-  ctx.strokeStyle = "lime";
-  ctx.lineWidth = 3;
-
-  keypoints.forEach(p => {
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, 4, 0, 2 * Math.PI);
-    ctx.fill();
-  });
-
-  edges.forEach(([a,b]) => {
-    const p = keypoints[a];
-    const q = keypoints[b];
-    ctx.beginPath();
-    ctx.moveTo(p.x, p.y);
-    ctx.lineTo(q.x, q.y);
-    ctx.stroke();
-  });
-}
-
-/* ------------------- Pose Detection ------------------- */
-async function detect(imageElement, canvas) {
-  if (!detector) {
-    alert("Model not loaded yet!");
-    return null;
-  }
-
-  const poses = await detector.estimatePoses(imageElement);
-  if (!poses.length) return null;
-
-  const ctx = canvas.getContext("2d");
-  canvas.width = imageElement.width;
-  canvas.height = imageElement.height;
-  ctx.drawImage(imageElement, 0, 0);
-
-  const keypoints = poses[0].keypoints.map(p => ({
-    x: p.x,
-    y: p.y,
-    score: p.score
-  }));
-
-  drawSkeleton(ctx, keypoints);
-  return keypoints;
-}
-
-/* ------------------- Table Output ------------------- */
-function updateTable(frontKP, sideKP) {
-  const table = document.getElementById("keyTable");
-  table.innerHTML = "";
-
-  const header = `
-    <tr>
-      <th>Joint</th>
-      <th>Front (x,y)</th>
-      <th>Side (x,y)</th>
-    </tr>`;
-  table.insertAdjacentHTML("beforeend", header);
-
-  const names = [
-    "Nose","Left Eye","Right Eye","Left Ear","Right Ear",
-    "Left Shoulder","Right Shoulder","Left Elbow","Right Elbow",
-    "Left Wrist","Right Wrist","Left Hip","Right Hip",
-    "Left Knee","Right Knee","Left Ankle","Right Ankle"
+  const EDGES = [
+    [0,1],[0,2],[1,3],[2,4],
+    [5,6],[5,7],[7,9],[6,8],[8,10],
+    [11,12],[11,13],[13,15],[12,14],[14,16],
+    [5,11],[6,12]
   ];
 
-  for (let i = 0; i < 17; i++) {
-    table.insertAdjacentHTML(
-      "beforeend",
-      `<tr>
-         <td>${names[i]}</td>
-         <td>${frontKP ? `${frontKP[i].x.toFixed(1)}, ${frontKP[i].y.toFixed(1)}` : "-"}</td>
-         <td>${sideKP ? `${sideKP[i].x.toFixed(1)}, ${sideKP[i].y.toFixed(1)}` : "-"}</td>
-       </tr>`
-    );
+  const ANGLE_DEFS = {
+    "Left Elbow": ["left_shoulder","left_elbow","left_wrist"],
+    "Right Elbow": ["right_shoulder","right_elbow","right_wrist"],
+    "Left Shoulder": ["left_elbow","left_shoulder","left_hip"],
+    "Right Shoulder": ["right_elbow","right_shoulder","right_hip"],
+    "Left Knee": ["left_hip","left_knee","left_ankle"],
+    "Right Knee": ["right_hip","right_knee","right_ankle"],
+    "Left Hip": ["left_shoulder","left_hip","left_knee"],
+    "Right Hip": ["right_shoulder","right_hip","right_knee"],
+    "Neck (approx)": ["left_ear","left_shoulder","left_hip"]
+  };
+
+  const CONF_THRESH = 0.30; // fixed threshold
+
+  // -------------- Helpers ----------------
+  function readImageFileAsImage(file){
+    return new Promise((res,rej)=>{
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = ()=>{ URL.revokeObjectURL(url); res(img); };
+      img.onerror = (e)=> rej(e);
+      img.src = url;
+    });
   }
-}
 
-/* ------------------- Main Button ------------------- */
-document.getElementById("runBtn").addEventListener("click", async () => {
-  const frontImg = document.getElementById("frontImg");
-  const sideImg = document.getElementById("sideImg");
-
-  if (!frontImg.src || !sideImg.src) {
-    alert("Upload both images first!");
-    return;
+  function padImageToSquareCanvas(imgEl, canvasSize=512){
+    // create an offscreen square canvas with the larger dimension, draw image centered,
+    // then scale to canvasSize into returned canvas
+    const w = imgEl.naturalWidth, h = imgEl.naturalHeight;
+    const size = Math.max(w,h);
+    const off = document.createElement('canvas'); off.width = size; off.height = size;
+    const octx = off.getContext('2d');
+    octx.fillStyle = 'black'; octx.fillRect(0,0,size,size);
+    const x = Math.round((size - w)/2), y = Math.round((size - h)/2);
+    octx.drawImage(imgEl, x, y, w, h);
+    // final canvas scaled to desired size
+    const out = document.createElement('canvas'); out.width = canvasSize; out.height = canvasSize;
+    out.getContext('2d').drawImage(off, 0, 0, canvasSize, canvasSize);
+    // offsets scaled
+    const scale = canvasSize / size;
+    return { canvas: out, offsetX: Math.round(x * scale), offsetY: Math.round(y * scale), size: canvasSize, scale };
   }
 
-  const frontKP = await detect(frontImg, document.getElementById("frontCanvas"));
-  const sideKP = await detect(sideImg, document.getElementById("sideCanvas"));
+  function drawOnCanvas(ctx, imgCanvas){
+    // draws the padded image onto destination canvas
+    ctx.clearRect(0,0,ctx.canvas.width, ctx.canvas.height);
+    ctx.drawImage(imgCanvas, 0, 0, ctx.canvas.width, ctx.canvas.height);
+  }
 
-  updateTable(frontKP, sideKP);
+  function drawSkeletonAndPoints(ctx, keypoints, confThreshold=CONF_THRESH){
+    const w = ctx.canvas.width, h = ctx.canvas.height;
+    // skeleton
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = 'cyan';
+    for (const [a,b] of EDGES){
+      const p = keypoints[a], q = keypoints[b];
+      if (p.score >= confThreshold && q.score >= confThreshold){
+        ctx.beginPath();
+        ctx.moveTo(p.x * w, p.y * h);
+        ctx.lineTo(q.x * w, q.y * h);
+        ctx.stroke();
+      }
+    }
+    // points
+    for (let i=0;i<keypoints.length;i++){
+      const p = keypoints[i];
+      const px = p.x * w, py = p.y * h;
+      ctx.beginPath();
+      ctx.fillStyle = p.score >= confThreshold ? 'lime' : 'gray';
+      ctx.arc(px, py, 4, 0, Math.PI*2);
+      ctx.fill();
+      // index label
+      ctx.fillStyle = 'white';
+      ctx.font = '10px monospace';
+      ctx.fillText(i, px+6, py-6);
+    }
+  }
 
-  console.log("Front keypoints:", frontKP);
-  console.log("Side keypoints:", sideKP);
-});
-</script>
+  function angleAtB_deg(A,B,C){
+    // A,B,C are {x,y} in same pixel space
+    const ABx = A.x - B.x, ABy = A.y - B.y;
+    const CBx = C.x - B.x, CBy = C.y - B.y;
+    const magAB = Math.hypot(ABx, ABy), magCB = Math.hypot(CBx, CBy);
+    if (magAB === 0 || magCB === 0) return NaN;
+    let cos = (ABx*CBx + ABy*CBy) / (magAB * magCB);
+    cos = Math.max(-1, Math.min(1, cos));
+    return Math.acos(cos) * 180 / Math.PI;
+  }
 
+  function kpNameIndex(name){
+    return KP_NAMES.indexOf(name);
+  }
+
+  // translation+scaling normalization: translate so mid-hip at origin, scale by height proxy (nose -> mid-ankles)
+  function normalizeKeypointsPixelSpace(kpsPixel){
+    // kpsPixel: array of {x_px, y_px, score}
+    const leftHip = kpsPixel[kpNameIndex('left_hip')];
+    const rightHip = kpsPixel[kpNameIndex('right_hip')];
+    const midHip = { x: (leftHip.x_px + rightHip.x_px)/2.0, y: (leftHip.y_px + rightHip.y_px)/2.0 };
+
+    const nose = kpsPixel[kpNameIndex('nose')];
+    const leftAnkle = kpsPixel[kpNameIndex('left_ankle')];
+    const rightAnkle = kpsPixel[kpNameIndex('right_ankle')];
+    const midAnkle = { x: (leftAnkle.x_px + rightAnkle.x_px)/2.0, y: (leftAnkle.y_px + rightAnkle.y_px)/2.0 };
+
+    let heightProxy = Math.hypot(nose.x_px - midAnkle.x, nose.y_px - midAnkle.y);
+    if (!isFinite(heightProxy) || heightProxy < 1e-3) heightProxy = 1.0; // avoid div by zero
+
+    const normalized = kpsPixel.map(p => ({
+      name: p.name,
+      x_norm: (p.x_px - midHip.x)/heightProxy,
+      y_norm: (p.y_px - midHip.y)/heightProxy,
+      score: p.score
+    }));
+    return { normalized, heightProxy, midHip };
+  }
+
+  // -------------- Model init ----------------
+  let detector = null;
+  async function loadModel(){
+    document.getElementById('status').textContent = 'loading model...';
+    detector = await poseDetection.createDetector(MODEL, MODEL_CONFIG);
+    document.getElementById('status').textContent = 'model loaded';
+    console.log('detector ready', detector);
+  }
+  loadModel();
+
+  // -------------- Main flow ----------------
+  document.getElementById('runBtn').addEventListener('click', async ()=>{
+    const frontFile = document.getElementById('frontFile').files[0];
+    const sideFile  = document.getElementById('sideFile').files[0];
+    if (!frontFile || !sideFile){ alert('Please upload both front and side images'); return; }
+    if (!detector){ alert('Model still loading — wait a moment'); return; }
+
+    document.getElementById('status').textContent = 'reading images...';
+
+    // read images
+    const frontImgEl = await readImageFileAsImage(frontFile);
+    const sideImgEl  = await readImageFileAsImage(sideFile);
+
+    // pad -> square & scale to canvas-size
+    const CANV_SIZE = 512;
+    const frontPad = padImageToSquareCanvas(frontImgEl, CANV_SIZE);
+    const sidePad  = padImageToSquareCanvas(sideImgEl, CANV_SIZE);
+
+    // prepare displayed canvases to show padded image
+    const frontCanvas = document.getElementById('frontCanvas');
+    const sideCanvas  = document.getElementById('sideCanvas');
+    frontCanvas.width = CANV_SIZE; frontCanvas.height = CANV_SIZE;
+    sideCanvas.width = CANV_SIZE;  sideCanvas.height = CANV_SIZE;
+
+    // draw padded image onto canvas, and pass the SAME canvas to detector (so keypoints are in that pixel space)
+    const fctx = frontCanvas.getContext('2d');
+    drawOnCanvas(fctx, frontPad.canvas);
+    const sctx = sideCanvas.getContext('2d');
+    drawOnCanvas(sctx, sidePad.canvas);
+
+    document.getElementById('status').textContent = 'running MoveNet on front...';
+    const frontPoseArr = await detector.estimatePoses(frontPad.canvas, {flipHorizontal:false});
+    document.getElementById('status').textContent = 'running MoveNet on side...';
+    const sidePoseArr  = await detector.estimatePoses(sidePad.canvas,  {flipHorizontal:false});
+
+    if (!frontPoseArr.length || !sidePoseArr.length){
+      alert('Pose not detected in at least one image. Try different images or better lighting.');
+      return;
+    }
+
+    const frontPose = frontPoseArr[0];
+    const sidePose  = sidePoseArr[0];
+
+    // Convert to normalized (0..1) coordinates relative to padded canvas and keep score
+    function toNormalizedKeypoints(pose, canvasSize){
+      // pose.keypoints may have varying order depending on model; MoveNet uses 17 in the same order we expect
+      return pose.keypoints.map((kp, idx) => ({
+        name: KP_NAMES[idx] ?? (`kp${idx}`),
+        x: kp.x / canvasSize,
+        y: kp.y / canvasSize,
+        score: kp.score,
+        x_px: kp.x,
+        y_px: kp.y
+      }));
+    }
+    const frontKP = toNormalizedKeypoints(frontPose, CANV_SIZE);
+    const sideKP  = toNormalizedKeypoints(sidePose, CANV_SIZE);
+
+    // draw skeleton+points on the SAME canvases (so annotations appear on padded images)
+    // Clear & redraw background image first
+    drawOnCanvas(fctx, frontPad.canvas);
+    drawOnCanvas(sctx, sidePad.canvas);
+    drawSkeletonAndPoints(fctx, frontKP, CONF_THRESH);
+    drawSkeletonAndPoints(sctx, sideKP, CONF_THRESH);
+
+    // compute angles in both views
+    function computeAnglesFromKP(kpArray, canvasSize){
+      // build pixel map
+      const pixels = kpArray.map(p => ({ x_px: p.x_px, y_px: p.y_px, score: p.score, name: p.name }));
+      const angles = {};
+      for (const [angName, triple] of Object.entries(ANGLE_DEFS)){
+        const Ai = kpNameIndex(triple[0]), Bi = kpNameIndex(triple[1]), Ci = kpNameIndex(triple[2]);
+        const A = {x: pixels[Ai].x_px, y: pixels[Ai].y_px};
+        const B = {x: pixels[Bi].x_px, y: pixels[Bi].y_px};
+        const C = {x: pixels[Ci].x_px, y: pixels[Ci].y_px};
+        const conf = Math.min(pixels[Ai].score, pixels[Bi].score, pixels[Ci].score);
+        const ang = angleAtB_deg(A,B,C);
+        angles[angName] = { angle: isFinite(ang) ? Number(ang.toFixed(1)) : null, conf: Number(conf.toFixed(3)) };
+      }
+      return angles;
+    }
+
+    const frontAngles = computeAnglesFromKP(frontKP, CANV_SIZE);
+    const sideAngles  = computeAnglesFromKP(sideKP, CANV_SIZE);
+
+    // choose best view per angle by higher conf (min of triple)
+    const angleRows = [];
+    for (const name of Object.keys(ANGLE_DEFS)){
+      const f = frontAngles[name] || {angle:null, conf:0};
+      const s = sideAngles[name]  || {angle:null, conf:0};
+      const chosen = (f.conf >= s.conf) ? {view:'front', angle:f.angle, conf:f.conf} : {view:'side', angle:s.angle, conf:s.conf};
+      angleRows.push({
+        joint: name,
+        front_angle: f.angle, front_conf: f.conf,
+        side_angle: s.angle,  side_conf: s.conf,
+        chosen_view: chosen.view,
+        chosen_angle: chosen.angle,
+        chosen_conf: chosen.conf
+      });
+    }
+
+    // draw chosen-angle labels onto the chosen canvas near the joint
+    // We'll label the chosen joint B (middle of triple)
+    for (const row of angleRows){
+      const triple = ANGLE_DEFS[row.joint];
+      const midName = triple[1];
+      const midIdx = kpNameIndex(midName);
+      if (row.chosen_view === 'front'){
+        const p = frontKP[midIdx];
+        if (p.score >= 0.05 && row.chosen_angle !== null){ // very low threshold to allow label
+          fctx.fillStyle = 'yellow';
+          fctx.font = '12px monospace';
+          fctx.fillText(`${row.joint}: ${row.chosen_angle}°`, p.x_px + 6, p.y_px - 6);
+        }
+      } else {
+        const p = sideKP[midIdx];
+        if (p.score >= 0.05 && row.chosen_angle !== null){
+          sctx.fillStyle = 'yellow';
+          sctx.font = '12px monospace';
+          sctx.fillText(`${row.joint}: ${row.chosen_angle}°`, p.x_px + 6, p.y_px - 6);
+        }
+      }
+    }
+
+    // pose alignment & normalization: compute pixel-space arrays and normalized coords
+    function buildKPpixelArray(kpArray){
+      return kpArray.map(p => ({ name: p.name, x_px: p.x_px, y_px: p.y_px, score: p.score }));
+    }
+    function normalizeAndReport(kpPixelArray){
+      // mid-hip
+      const leftHip = kpPixelArray[kpNameIndex('left_hip')];
+      const rightHip = kpPixelArray[kpNameIndex('right_hip')];
+      const midHip = { x: (leftHip.x_px + rightHip.x_px)/2.0, y: (leftHip.y_px + rightHip.y_px)/2.0 };
+
+      const nose = kpPixelArray[kpNameIndex('nose')];
+      const leftAnkle = kpPixelArray[kpNameIndex('left_ankle')];
+      const rightAnkle = kpPixelArray[kpNameIndex('right_ankle')];
+      const midAnkle = { x: (leftAnkle.x_px + rightAnkle.x_px)/2.0, y: (leftAnkle.y_px + rightAnkle.y_px)/2.0 };
+
+      let heightProxy = Math.hypot(nose.x_px - midAnkle.x, nose.y_px - midAnkle.y);
+      if (!isFinite(heightProxy) || heightProxy < 1e-3) heightProxy = 1.0;
+
+      const rec = kpPixelArray.map(p => ({
+        name: p.name,
+        x_px: p.x_px,
+        y_px: p.y_px,
+        score: p.score,
+        x_norm: (p.x_px - midHip.x)/heightProxy,
+        y_norm: (p.y_px - midHip.y)/heightProxy
+      }));
+      return { rec, midHip, heightProxy };
+    }
+
+    const frontPixels = buildKPpixelArray(frontKP);
+    const sidePixels  = buildKPpixelArray(sideKP);
+    const frontNorm = normalizeAndReport(frontPixels);
+    const sideNorm  = normalizeAndReport(sidePixels);
+
+    // Display info blocks and raw keypoints (pixel & normalized)
+    document.getElementById('frontInfo').textContent = `Height proxy(px): ${frontNorm.heightProxy.toFixed(1)}; midHip: (${frontNorm.midHip.x.toFixed(1)}, ${frontNorm.midHip.y.toFixed(1)})`;
+    document.getElementById('sideInfo').textContent  = `Height proxy(px): ${sideNorm.heightProxy.toFixed(1)}; midHip: (${sideNorm.midHip.x.toFixed(1)}, ${sideNorm.midHip.y.toFixed(1)})`;
+
+    document.getElementById('frontKP').textContent = frontNorm.rec.map(r => `${r.name.padEnd(14)} px:( ${r.x_px.toFixed(1)}, ${r.y_px.toFixed(1)} ) score:${r.score.toFixed(3)} norm:( ${r.x_norm.toFixed(3)}, ${r.y_norm.toFixed(3)} )`).join('\\n');
+    document.getElementById('sideKP').textContent  = sideNorm.rec.map(r => `${r.name.padEnd(14)} px:( ${r.x_px.toFixed(1)}, ${r.y_px.toFixed(1)} ) score:${r.score.toFixed(3)} norm:( ${r.x_norm.toFixed(3)}, ${r.y_norm.toFixed(3)} )`).join('\\n');
+
+    // draw angle table HTML
+    const anglesDiv = document.getElementById('anglesTable');
+    let html = '<table><thead><tr><th>Joint</th><th>Front (deg/conf)</th><th>Side (deg/conf)</th><th>Chosen</th></tr></thead><tbody>';
+    for (const r of angleRows){
+      html += `<tr>
+        <td>${r.joint}</td>
+        <td>${r.front_angle ?? '-'} / ${r.front_conf}</td>
+        <td>${r.side_angle ?? '-'} / ${r.side_conf}</td>
+        <td>${r.chosen_view} ${r.chosen_angle ?? '-'} / ${r.chosen_conf}</td>
+      </tr>`;
+    }
+    html += '</tbody></table>';
+    anglesDiv.innerHTML = html;
+
+    document.getElementById('status').textContent = 'done';
+  });
+
+  </script>
 </body>
 </html>
