@@ -1,41 +1,48 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8" />
-    <title>Pose Detection</title>
+<meta charset="UTF-8" />
+<title>MoveNet Dual-View Analyzer</title>
 
-    <style>
-        body { font-family: Arial; padding: 20px; }
-        #results-table td, #results-table th {
-            padding: 4px 10px;
-            border: 1px solid #333;
-        }
-        #results-table { border-collapse: collapse; margin-top: 20px; }
-        canvas { border: 1px solid #333; margin: 10px 0; }
-    </style>
+<!-- CSS -->
+<link rel="stylesheet" href="styles.css" />
+
+<!-- TensorFlow.js + MoveNet -->
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.15.0"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl"></script>
+
 </head>
-
 <body>
-<h2>MoveNet Dual-View Pose Detector</h2>
 
-<p><b id="status">Loading model…</b></p>
+<div class="container">
+  <h1>MoveNet Dual-View Analyzer</h1>
 
-<input type="file" id="frontInput" accept="image/*"><br><br>
-<input type="file" id="sideInput" accept="image/*"><br><br>
-<button id="runBtn" disabled>Run Detection</button>
+  <div class="upload-section">
+    <label>Front View Image</label>
+    <input type="file" id="frontInput" accept="image/*">
 
-<h3>Front View Result</h3>
-<canvas id="frontCanvas" width="400" height="400"></canvas>
+    <label>Side View Image</label>
+    <input type="file" id="sideInput" accept="image/*">
 
-<h3>Side View Result</h3>
-<canvas id="sideCanvas" width="400" height="400"></canvas>
+    <button id="detectBtn">Run Detection</button>
+  </div>
 
-<h3>Keypoints</h3>
-<table id="results-table"></table>
+  <div class="canvas-section">
+    <div>
+      <h2>Front View</h2>
+      <canvas id="frontCanvas"></canvas>
+    </div>
+    <div>
+      <h2>Side View</h2>
+      <canvas id="sideCanvas"></canvas>
+    </div>
+  </div>
 
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.21.0/dist/tf.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@0.0.6/dist/pose-detection.min.js"></script>
+  <div id="results" class="results"></div>
+</div>
 
+<!-- JS -->
 <script src="app.js"></script>
 </body>
 </html>
