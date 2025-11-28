@@ -1,0 +1,23 @@
+body {
+    font-family: Arial;
+    padding: 20px;
+}
+
+.upload-section {
+    margin-bottom: 20px;
+}
+
+canvas {
+    width: 350px;
+    border: 1px solid #ccc;
+    margin-bottom: 10px;
+}
+
+.result-container {
+    display: flex;
+    gap: 30px;
+}
+
+.canvas-block {
+    text-align: center;
+}
