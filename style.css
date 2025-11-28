@@ -3,19 +3,17 @@ body {
   margin: 0;
   padding: 0;
   font-family: Arial, sans-serif;
+  overflow-x: hidden;   /* prevent horizontal scroll */
 }
 
 .container {
-  width: 90%;
-  max-width: 1100px;
+  width: 95%;
+  max-width: 1200px;
   margin: auto;
   padding: 20px;
 }
 
-h1 {
-  margin-bottom: 20px;
-}
-
+/* Upload Box */
 .upload-section {
   background: white;
   padding: 20px;
@@ -24,44 +22,45 @@ h1 {
   margin-bottom: 25px;
 }
 
-.upload-section label {
-  display: block;
-  margin-top: 10px;
-  font-weight: bold;
-}
-
-.upload-section button {
-  margin-top: 15px;
-  padding: 10px 16px;
-  background: #0077ff;
-  color: white;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-}
-
-.upload-section button:hover {
-  background: #005fcc;
-}
-
+/* CANVAS AREA */
 .canvas-section {
   display: flex;
-  gap: 30px;
+  justify-content: center;
+  gap: 20px;
   flex-wrap: wrap;
+  width: 100%;
 }
 
+.canvas-section div {
+  flex: 1 1 45%;
+  max-width: 45%;
+  text-align: center;
+}
+
+/* Auto-resize the canvas so images always fit screen height */
 canvas {
   border: 1px solid #aaa;
   background: white;
+
+  width: 100%;        /* Scale down automatically */
+  height: auto;       /* Keep proportions */
+  max-height: 45vh;   /* Ensures the canvas never exceeds 45% screen height */
+
+  object-fit: contain;
+  display: block;
+  margin: auto;
 }
 
+/* Results Table */
 .results {
   margin-top: 20px;
   background: white;
   padding: 20px;
   border-radius: 10px;
   box-shadow: 0 0 8px rgba(0,0,0,0.1);
-  overflow-x: auto;
+  overflow-x: auto;  /* Table scrolls, page does NOT */
+  max-height: 40vh;  /* Prevent giant tables */
+  overflow-y: auto;
 }
 
 table {
@@ -71,5 +70,6 @@ table {
 
 td, th {
   border: 1px solid #bbb;
-  padding: 8px;
+  padding: 6px;
+  font-size: 14px;
 }
