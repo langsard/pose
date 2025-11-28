@@ -1,41 +1,54 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>MoveNet Web Pose Detector</title>
-    <link rel="stylesheet" href="style.css">
+  <meta charset="utf-8"/>
+  <title>Dual-view MoveNet Posture Analyzer</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
+  <h1>Dual-view MoveNet Posture Analyzer</h1>
 
-<h2>MoveNet Pose Detector (Front + Side Views)</h2>
+  <div class="controls">
+    <div class="col">
+      <label>Front view image</label>
+      <input id="frontFile" type="file" accept="image/*">
+    </div>
+    <div class="col">
+      <label>Side view image</label>
+      <input id="sideFile" type="file" accept="image/*">
+    </div>
 
-<div class="upload-section">
-    <label>Front View Image:</label>
-    <input type="file" id="frontInput" accept="image/*">
+    <div class="col">
+      <label>Confidence threshold: <span id="confLabel">0.30</span></label>
+      <input id="confRange" type="range" min="0" max="100" value="30">
+    </div>
 
-    <label>Side View Image:</label>
-    <input type="file" id="sideInput" accept="image/*">
+    <div class="col actions">
+      <button id="runBtn">Run detection</button>
+    </div>
+  </div>
 
-    <button id="runBtn">Run Detection</button>
-</div>
-
-<div class="result-container">
+  <div class="canvases">
     <div class="canvas-block">
-        <h3>Front View</h3>
-        <canvas id="frontCanvas"></canvas>
-        <pre id="frontKeypoints"></pre>
+      <h3>Front (padded)</h3>
+      <canvas id="frontCanvas" width="512" height="512"></canvas>
+      <pre id="frontKP" class="kpbox"></pre>
     </div>
 
     <div class="canvas-block">
-        <h3>Side View</h3>
-        <canvas id="sideCanvas"></canvas>
-        <pre id="sideKeypoints"></pre>
+      <h3>Side (padded)</h3>
+      <canvas id="sideCanvas" width="512" height="512"></canvas>
+      <pre id="sideKP" class="kpbox"></pre>
     </div>
-</div>
+  </div>
 
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.21.0"></script>
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection"></script>
-<script src="app.js"></script>
+  <div id="report" class="report"></div>
 
+  <!-- TFJS + Pose Detection -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.11.0/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@0.0.9/dist/pose-detection.min.js"></script>
+
+  <script src="app.js"></script>
 </body>
 </html>
