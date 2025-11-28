@@ -1,30 +1,401 @@
-<!DOCTYPE html>
-<html>
+<!doctype html>
+<html lang="en">
 <head>
-  <title>Pose Detect</title>
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.21.0"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection/dist/movenet.js"></script>
+  <meta charset="utf-8" />
+  <title>Dual-View MoveNet Posture Analyzer (angles, confidence, best-view)</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <style>
-    canvas { border:1px solid #aaa; margin:10px; }
+    body{font-family:Inter,system-ui,Arial;margin:18px;color:#111}
+    h1{font-size:20px;margin-bottom:6px}
+    .row{display:flex;gap:12px;flex-wrap:wrap}
+    .card{border:1px solid #e6e6e6;padding:12px;border-radius:8px;background:#fafafa; min-width:320px}
+    label{display:block;margin-bottom:6px;font-weight:600}
+    input[type=file]{display:block;margin-bottom:8px}
+    canvas{background:#111;border-radius:6px;max-width:100%}
+    table{width:100%;border-collapse:collapse;margin-top:8px}
+    th,td{padding:6px 8px;border:1px solid #eee;text-align:left;font-size:13px}
+    .small{font-size:13px;color:#666}
+    button{background:#0b6ef0;color:#fff;border:none;padding:8px 12px;border-radius:6px;cursor:pointer}
+    pre{background:#f7f7f7;padding:8px;border-radius:6px;overflow:auto;max-height:260px}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .muted{color:#666;font-size:13px}
+    input[type=range]{width:160px}
   </style>
 </head>
 <body>
+  <h1>Dual-View MoveNet Posture Analyzer</h1>
 
-<h2>Front Image</h2>
-<input type="file" id="frontInput" accept="image/*">
-<canvas id="frontCanvas"></canvas>
+  <div class="row">
+    <div class="card">
+      <label>Front view image (facing camera)</label>
+      <input id="frontFile" type="file" accept="image/*">
+      <label>Side view image (profile)</label>
+      <input id="sideFile" type="file" accept="image/*">
+      <div style="margin-top:8px">
+        <button id="runBtn">Run detection</button>
+        <span id="status" class="small" style="margin-left:12px"></span>
+      </div>
 
-<h2>Side Image</h2>
-<input type="file" id="sideInput" accept="image/*">
-<canvas id="sideCanvas"></canvas>
+      <div style="margin-top:10px" class="small">
+        Confidence threshold:
+        <input id="confSlider" type="range" min="0" max="100" value="30">
+        <span id="confLabel">0.30</span>
+      </div>
+    </div>
 
-<br><br>
-<button id="runBtn">Run Detection</button>
+    <div class="card small">
+      Notes: runs fully in-browser with MoveNet via TF.js. Images are padded (letterbox) to square — no squeeze. Results: padded annotated images, keypoint tables, angles, normalization.
+    </div>
+  </div>
 
-<h3>Keypoints Table</h3>
-<pre id="kpOutput"></pre>
+  <hr/>
 
-<script src="app.js"></script>
+  <div class="grid">
+    <div class="card">
+      <h3 style="margin-top:0">Front — padded canvas</h3>
+      <canvas id="frontCanvas" width="512" height="512"></canvas>
+      <div id="frontInfo" class="muted"></div>
+    </div>
+
+    <div class="card">
+      <h3 style="margin-top:0">Side — padded canvas</h3>
+      <canvas id="sideCanvas" width="512" height="512"></canvas>
+      <div id="sideInfo" class="muted"></div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:12px">
+    <h3 style="margin:0">Angles (front vs side & chosen best)</h3>
+    <div id="anglesTable" class="small"></div>
+  </div>
+
+  <div class="card" style="margin-top:12px">
+    <h3 style="margin:0">Keypoints (pixel & normalized)</h3>
+    <div style="display:flex;gap:12px;margin-top:8px">
+      <div style="flex:1">
+        <strong>Front</strong>
+        <pre id="frontKP"></pre>
+      </div>
+      <div style="flex:1">
+        <strong>Side</strong>
+        <pre id="sideKP"></pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- TFJS + pose-detection -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.11.0/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@0.0.9/dist/pose-detection.min.js"></script>
+
+  <script>
+  // ---------- Config ----------
+  const MODEL = poseDetection.SupportedModels.MoveNet;
+  const MODEL_CONFIG = { modelType: poseDetection.movenet.modelType.THUNDER }; // or LIGHTNING
+  const CANVAS_SIZE = 512;
+
+  const KP_NAMES = [
+    "nose","left_eye","right_eye","left_ear","right_ear",
+    "left_shoulder","right_shoulder","left_elbow","right_elbow",
+    "left_wrist","right_wrist","left_hip","right_hip",
+    "left_knee","right_knee","left_ankle","right_ankle"
+  ];
+
+  const EDGES = [
+    [0,1],[0,2],[1,3],[2,4],
+    [5,6],[5,7],[7,9],[6,8],[8,10],
+    [11,12],[11,13],[13,15],[12,14],[14,16],
+    [5,11],[6,12]
+  ];
+
+  const ANGLE_DEFS = {
+    "Left Elbow": ["left_shoulder","left_elbow","left_wrist"],
+    "Right Elbow": ["right_shoulder","right_elbow","right_wrist"],
+    "Left Shoulder": ["left_elbow","left_shoulder","left_hip"],
+    "Right Shoulder": ["right_elbow","right_shoulder","right_hip"],
+    "Left Knee": ["left_hip","left_knee","left_ankle"],
+    "Right Knee": ["right_hip","right_knee","right_ankle"],
+    "Left Hip": ["left_shoulder","left_hip","left_knee"],
+    "Right Hip": ["right_shoulder","right_hip","right_knee"],
+    "Neck (approx)": ["left_ear","left_shoulder","left_hip"]
+  };
+
+  // ---------- Helpers ----------
+  function setStatus(msg){ document.getElementById('status').textContent = msg; }
+
+  function readImageFileAsImage(file){
+    return new Promise((res, rej)=>{
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = ()=>{ URL.revokeObjectURL(url); res(img); };
+      img.onerror = (e)=> rej(e);
+      img.src = url;
+    });
+  }
+
+  function padImageToSquareCanvas(imgEl, canvasSize=CANVAS_SIZE){
+    const w = imgEl.naturalWidth, h = imgEl.naturalHeight;
+    const size = Math.max(w,h);
+    const off = document.createElement('canvas'); off.width = size; off.height = size;
+    const octx = off.getContext('2d');
+    octx.fillStyle = 'black'; octx.fillRect(0,0,size,size);
+    const x = Math.round((size - w)/2), y = Math.round((size - h)/2);
+    octx.drawImage(imgEl, x, y, w, h);
+    const out = document.createElement('canvas'); out.width = canvasSize; out.height = canvasSize;
+    out.getContext('2d').drawImage(off, 0, 0, canvasSize, canvasSize);
+    const scale = canvasSize / size;
+    return { canvas: out, offsetX: Math.round(x*scale), offsetY: Math.round(y*scale), scale };
+  }
+
+  function drawBackgroundCanvas(targetCanvas, srcCanvas){
+    const ctx = targetCanvas.getContext('2d');
+    ctx.clearRect(0,0,targetCanvas.width,targetCanvas.height);
+    ctx.drawImage(srcCanvas,0,0,targetCanvas.width,targetCanvas.height);
+  }
+
+  function drawSkeletonAndPoints(ctx, keypoints, confThreshold){
+    const w = ctx.canvas.width, h = ctx.canvas.height;
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = 'cyan';
+    for (const [a,b] of EDGES){
+      const p = keypoints[a], q = keypoints[b];
+      if (!p || !q) continue;
+      if (p.score >= confThreshold && q.score >= confThreshold){
+        ctx.beginPath();
+        ctx.moveTo(p.x * w, p.y * h);
+        ctx.lineTo(q.x * w, q.y * h);
+        ctx.stroke();
+      }
+    }
+    for (let i=0;i<keypoints.length;i++){
+      const p = keypoints[i];
+      if (!p) continue;
+      const px = p.x * w, py = p.y * h;
+      ctx.beginPath();
+      ctx.fillStyle = p.score >= confThreshold ? 'lime' : 'gray';
+      ctx.arc(px, py, 4, 0, Math.PI*2);
+      ctx.fill();
+      ctx.fillStyle = 'white';
+      ctx.font = '10px monospace';
+      ctx.fillText(i, px+6, py-6);
+    }
+  }
+
+  function angleAtB_deg(A,B,C){
+    const ABx = A.x - B.x, ABy = A.y - B.y;
+    const CBx = C.x - B.x, CBy = C.y - B.y;
+    const magAB = Math.hypot(ABx,ABy), magCB = Math.hypot(CBx,CBy);
+    if (magAB === 0 || magCB === 0) return NaN;
+    let cos = (ABx*CBx + ABy*CBy) / (magAB * magCB);
+    cos = Math.max(-1, Math.min(1, cos));
+    return Math.acos(cos) * 180 / Math.PI;
+  }
+
+  function kpIndexByName(name){ return KP_NAMES.indexOf(name); }
+
+  // Normalize: translate mid-hip to origin, scale by nose->mid-ankles distance
+  function normalizeKPpixel(kpPixelArray){
+    const leftHip = kpPixelArray[kpIndexByName('left_hip')];
+    const rightHip = kpPixelArray[kpIndexByName('right_hip')];
+    const midHip = { x: (leftHip.x_px + rightHip.x_px)/2, y: (leftHip.y_px + rightHip.y_px)/2 };
+
+    const nose = kpPixelArray[kpIndexByName('nose')];
+    const leftAnkle = kpPixelArray[kpIndexByName('left_ankle')];
+    const rightAnkle = kpPixelArray[kpIndexByName('right_ankle')];
+    const midAnkle = { x: (leftAnkle.x_px + rightAnkle.x_px)/2, y: (leftAnkle.y_px + rightAnkle.y_px)/2 };
+
+    let proxy = Math.hypot(nose.x_px - midAnkle.x, nose.y_px - midAnkle.y);
+    if (!isFinite(proxy) || proxy < 1e-3) proxy = 1.0;
+
+    return kpPixelArray.map(p => ({
+      name: p.name,
+      x_px: p.x_px,
+      y_px: p.y_px,
+      score: p.score,
+      x_norm: (p.x_px - midHip.x) / proxy,
+      y_norm: (p.y_px - midHip.y) / proxy
+    }));
+  }
+
+  // ---------- Model ----------
+  let detector = null;
+  async function loadModel(){
+    setStatus('loading model...');
+    detector = await poseDetection.createDetector(MODEL, MODEL_CONFIG);
+    setStatus('model loaded');
+  }
+  loadModel();
+
+  // ---------- UI wiring ----------
+  document.getElementById('confSlider').addEventListener('input', (e)=>{
+    const v = Number(e.target.value)/100;
+    document.getElementById('confLabel').textContent = v.toFixed(2);
+  });
+
+  document.getElementById('runBtn').addEventListener('click', async ()=>{
+    try {
+      const frontFile = document.getElementById('frontFile').files[0];
+      const sideFile  = document.getElementById('sideFile').files[0];
+      if (!frontFile || !sideFile){ alert('Please upload both front and side images'); return; }
+      if (!detector){ alert('Model still loading — wait a moment'); return; }
+
+      const confThreshold = Number(document.getElementById('confSlider').value)/100;
+      setStatus('reading images...');
+
+      const frontImg = await readImageFileAsImage(frontFile);
+      const sideImg  = await readImageFileAsImage(sideFile);
+
+      // pad
+      const frontPad = padImageToSquareCanvas(frontImg, CANVAS_SIZE);
+      const sidePad  = padImageToSquareCanvas(sideImg, CANVAS_SIZE);
+
+      // show padded image on canvases (we will annotate these same canvases)
+      const frontCanvas = document.getElementById('frontCanvas');
+      const sideCanvas  = document.getElementById('sideCanvas');
+      frontCanvas.width = CANVAS_SIZE; frontCanvas.height = CANVAS_SIZE;
+      sideCanvas.width  = CANVAS_SIZE; sideCanvas.height  = CANVAS_SIZE;
+
+      drawBackgroundCanvas(frontCanvas, frontPad.canvas);
+      drawBackgroundCanvas(sideCanvas,  sidePad.canvas);
+
+      setStatus('running MoveNet (front)...');
+      const frontPoses = await detector.estimatePoses(frontPad.canvas, {flipHorizontal:false});
+      setStatus('running MoveNet (side)...');
+      const sidePoses  = await detector.estimatePoses(sidePad.canvas,  {flipHorizontal:false});
+
+      if (!frontPoses.length || !sidePoses.length) { alert('Pose not detected in at least one image. Try different images.'); setStatus('no pose'); return; }
+
+      const frontPose = frontPoses[0];
+      const sidePose  = sidePoses[0];
+
+      // convert to normalized (0..1) coords relative to canvas and keep pixel coords
+      const convert = (pose, canvasSize) => {
+        // ensure keypoints array in expected order — MoveNet returns 17 points matching our KP_NAMES
+        const kps = [];
+        for (let i=0;i<pose.keypoints.length;i++){
+          const kp = pose.keypoints[i];
+          kps.push({
+            name: KP_NAMES[i] ?? (`kp${i}`),
+            x: kp.x / canvasSize,
+            y: kp.y / canvasSize,
+            score: kp.score ?? (kp.score === 0 ? 0 : (kp.confidence ?? 0)),
+            x_px: kp.x,
+            y_px: kp.y
+          });
+        }
+        return kps;
+      };
+
+      const frontKP = convert(frontPose, CANVAS_SIZE);
+      const sideKP  = convert(sidePose,  CANVAS_SIZE);
+
+      // redraw background + draw skeleton & points on same canvas
+      drawBackgroundCanvas(frontCanvas, frontPad.canvas);
+      drawSkeletonAndPoints(frontCanvas.getContext('2d'), frontKP, confThreshold);
+
+      drawBackgroundCanvas(sideCanvas, sidePad.canvas);
+      drawSkeletonAndPoints(sideCanvas.getContext('2d'), sideKP, confThreshold);
+
+      // Print keypoint tables (pixel + normalized)
+      function kpPixelRec(kpArray){
+        return kpArray.map(k => ({ name: k.name, x_px: k.x_px, y_px: k.y_px, score: Number(k.score.toFixed(3)), x_norm: Number(k.x.toFixed(4)), y_norm: Number(k.y.toFixed(4)) }));
+      }
+      const frontPix = kpPixelRec(frontKP);
+      const sidePix  = kpPixelRec(sideKP);
+
+      // Normalized (mid-hip translation & height scaling)
+      const frontNorm = normalizeKPpixel(frontPix);
+      const sideNorm  = normalizeKPpixel(sidePix);
+
+      // Display raw keypoints
+      document.getElementById('frontKP').textContent = frontNorm.map ? frontNorm.map? frontNorm.map : '' : JSON.stringify(frontNorm);
+      // custom formatted
+      document.getElementById('frontKP').textContent = frontNorm.map(r => `${r.name.padEnd(14)} px:(${r.x_px.toFixed(1)},${r.y_px.toFixed(1)}) sc:${r.score.toFixed(3)} norm:( ${r.x_norm.toFixed(3)}, ${r.y_norm.toFixed(3)} )`).join('\n');
+      document.getElementById('sideKP').textContent = sideNorm.map(r => `${r.name.padEnd(14)} px:(${r.x_px.toFixed(1)},${r.y_px.toFixed(1)}) sc:${r.score.toFixed(3)} norm:( ${r.x_norm.toFixed(3)}, ${r.y_norm.toFixed(3)} )`).join('\n');
+
+      // Compute angles in pixel space for each view
+      function computeAnglesFromKP(kpArray){
+        // kpArray has pixel coords x_px,y_px,score
+        const angles = {};
+        for (const [angName, triple] of Object.entries(ANGLE_DEFS)){
+          const Ai = kpIndexByName(triple[0]), Bi = kpIndexByName(triple[1]), Ci = kpIndexByName(triple[2]);
+          const A = { x: kpArray[Ai].x_px, y: kpArray[Ai].y_px };
+          const B = { x: kpArray[Bi].x_px, y: kpArray[Bi].y_px };
+          const C = { x: kpArray[Ci].x_px, y: kpArray[Ci].y_px };
+          const conf = Math.min(kpArray[Ai].score, kpArray[Bi].score, kpArray[Ci].score);
+          const ang = angleAtB_deg(A,B,C);
+          angles[angName] = { angle: isFinite(ang) ? Number(ang.toFixed(1)) : null, conf: Number(conf.toFixed(3)) };
+        }
+        return angles;
+      }
+
+      function kpIndexByName(name){ return KP_NAMES.indexOf(name); }
+
+      const frontAngles = computeAnglesFromKP(frontPix);
+      const sideAngles  = computeAnglesFromKP(sidePix);
+
+      // Choose best view per angle (higher min-conf)
+      const angleRows = [];
+      for (const name of Object.keys(ANGLE_DEFS)){
+        const f = frontAngles[name] || {angle:null, conf:0};
+        const s = sideAngles[name]  || {angle:null, conf:0};
+        const chosen = (f.conf >= s.conf) ? {view:'front', angle:f.angle, conf:f.conf} : {view:'side', angle:s.angle, conf:s.conf};
+        angleRows.push({
+          joint: name,
+          front_angle: f.angle, front_conf: f.conf,
+          side_angle: s.angle, side_conf: s.conf,
+          chosen_view: chosen.view, chosen_angle: chosen.angle, chosen_conf: chosen.conf
+        });
+      }
+
+      // annotate chosen angles on the chosen canvas near the mid-joint
+      // repaint to ensure labels visible
+      drawBackgroundCanvas(frontCanvas, frontPad.canvas);
+      drawSkeletonAndPoints(frontCanvas.getContext('2d'), frontKP, confThreshold);
+      drawBackgroundCanvas(sideCanvas, sidePad.canvas);
+      drawSkeletonAndPoints(sideCanvas.getContext('2d'), sideKP, confThreshold);
+
+      for (const row of angleRows){
+        const triple = ANGLE_DEFS[row.joint];
+        const midName = triple[1];
+        const midIdx = kpIndexByName(midName);
+        if (row.chosen_view === 'front'){
+          const p = frontKP[midIdx];
+          if (p && p.score > 0.02 && row.chosen_angle !== null){
+            const ctx = frontCanvas.getContext('2d');
+            ctx.fillStyle = 'yellow'; ctx.font = '12px monospace';
+            ctx.fillText(`${row.joint}: ${row.chosen_angle}°`, p.x_px + 6, p.y_px - 6);
+          }
+        } else {
+          const p = sideKP[midIdx];
+          if (p && p.score > 0.02 && row.chosen_angle !== null){
+            const ctx = sideCanvas.getContext('2d');
+            ctx.fillStyle = 'yellow'; ctx.font = '12px monospace';
+            ctx.fillText(`${row.joint}: ${row.chosen_angle}°`, p.x_px + 6, p.y_px - 6);
+          }
+        }
+      }
+
+      // Build angles HTML table
+      const anglesDiv = document.getElementById('anglesTable');
+      let html = '<table><thead><tr><th>Joint</th><th>Front (deg / conf)</th><th>Side (deg / conf)</th><th>Chosen</th></tr></thead><tbody>';
+      for (const r of angleRows){
+        html += `<tr><td>${r.joint}</td><td>${r.front_angle ?? '-'} / ${r.front_conf}</td><td>${r.side_angle ?? '-'} / ${r.side_conf}</td><td>${r.chosen_view} ${r.chosen_angle ?? '-'} / ${r.chosen_conf}</td></tr>`;
+      }
+      html += '</tbody></table>';
+      anglesDiv.innerHTML = html;
+
+      // display a bit of info
+      document.getElementById('frontInfo').textContent = `Front height-proxy (px): ${ (function(){ const nose = frontPix[kpIndexByName('nose')]; const la = frontPix[kpIndexByName('left_ankle')]; const ra = frontPix[kpIndexByName('right_ankle')]; const midA = {x:(la.x_px+ra.x_px)/2,y:(la.y_px+ra.y_px)/2}; return Math.hypot(nose.x_px-midA.x, nose.y_px-midA.y).toFixed(1); })() }`;
+      document.getElementById('sideInfo').textContent  = `Side height-proxy (px): ${ (function(){ const nose = sidePix[kpIndexByName('nose')]; const la = sidePix[kpIndexByName('left_ankle')]; const ra = sidePix[kpIndexByName('right_ankle')]; const midA = {x:(la.x_px+ra.x_px)/2,y:(la.y_px+ra.y_px)/2}; return Math.hypot(nose.x_px-midA.x, nose.y_px-midA.y).toFixed(1); })() }`;
+
+      setStatus('done');
+    } catch (e) {
+      console.error(e);
+      alert('Error: ' + (e.message||e));
+      setStatus('error');
+    }
+  });
+
+  </script>
 </body>
 </html>
