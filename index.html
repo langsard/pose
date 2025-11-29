@@ -1,56 +1,83 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ErgoPose</title>
-  <link rel="stylesheet" href="style.css" />
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>ErgoPose — Ergonomic Assessment</title>
+
+  <link rel="stylesheet" href="style.css">
+
+  <!-- TFJS + Pose Detection (MoveNet) -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.15.0/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl@4.15.0/dist/tf-backend-webgl.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@0.0.7/dist/pose-detection.min.js"></script>
 </head>
 <body>
-  <h1>Ergonomic Assessment</h1>
+  <main class="page">
+    <header class="header">
+      <h1>Ergonomic Assessment</h1>
+    </header>
 
-  <section class="upload-section">
-    <div class="step">
-      <h2>Step 1: Upload Front Image</h2>
-      <input type="file" id="frontInput" accept="image/*" />
-      <div class="image-box">
-        <img id="frontPreview" src="examples/front.png" />
+    <section class="step step-upload">
+      <h2><strong>Step 1:</strong> Add picture</h2>
+
+      <div class="views-row">
+        <!-- FRONT PREVIEW -->
+        <div class="view-card">
+          <div class="box-label">Front view</div>
+
+          <div class="image-box" id="frontPreviewBox">
+            <img id="frontPreviewImg" alt="front sample" src="examples/front.png">
+          </div>
+
+          <input type="file" id="frontInput" accept="image/*" />
+        </div>
+
+        <!-- SIDE PREVIEW -->
+        <div class="view-card">
+          <div class="box-label">Side view</div>
+
+          <div class="image-box" id="sidePreviewBox">
+            <img id="sidePreviewImg" alt="side sample" src="examples/side.png">
+          </div>
+
+          <input type="file" id="sideInput" accept="image/*" />
+        </div>
       </div>
-    </div>
+    </section>
 
-    <div class="step">
-      <h2>Step 1: Upload Side Image</h2>
-      <input type="file" id="sideInput" accept="image/*" />
-      <div class="image-box">
-        <img id="sidePreview" src="examples/side.png" />
+    <section class="step step-run">
+      <h2><strong>Step 2:</strong> Get result</h2>
+
+      <div class="controls">
+        <button id="runBtn" class="btn-primary" disabled>Run</button>
+        <div id="modelStatus" class="muted">Loading model...</div>
       </div>
-    </div>
-  </section>
 
-  <button id="runBtn">Run Detection</button>
+      <div class="views-row" style="margin-top:18px;">
+        <div class="result-card">
+          <div class="box-label">Front result</div>
+          <div class="image-box result-box" id="frontResultBox"></div>
+        </div>
 
-  <section id="output-section">
-    <h2>Detection Result</h2>
-    <div class="result-row">
-      <div class="image-box">
-        <canvas id="frontCanvas"></canvas>
+        <div class="result-card">
+          <div class="box-label">Side result</div>
+          <div class="image-box result-box" id="sideResultBox"></div>
+        </div>
       </div>
-      <div class="image-box">
-        <canvas id="sideCanvas"></canvas>
-      </div>
-    </div>
+    </section>
 
-    <table id="resultTable">
-      <thead>
-        <tr>
-          <th>Keypoint</th>
-          <th>Front (x,y)</th>
-          <th>Side (x,y)</th>
-        </tr>
-      </thead>
-      <tbody></tbody>
-    </table>
-  </section>
+    <section class="step step-table">
+      <h2>Keypoints & Coordinates</h2>
+      <div id="resultsTable"></div>
+
+      <div id="anglesSummary" style="margin-top:12px;"></div>
+    </section>
+
+    <footer class="footer muted">
+      Example images: <code>examples/front.png</code> and <code>examples/side.png</code>.
+    </footer>
+  </main>
 
   <script src="app.js"></script>
 </body>
