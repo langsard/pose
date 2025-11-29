@@ -1,82 +1,56 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Ergonomic Assessment — Dual View</title>
-
-  <link rel="stylesheet" href="styles.css">
-
-  <!-- TFJS + Pose Detection -->
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.15.0/dist/tf.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl@4.15.0/dist/tf-backend-webgl.min.js"></script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ErgoPose</title>
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <main class="page">
-    <header class="header">
-      <h1>Ergonomic Assessment</h1>
-    </header>
+  <h1>Ergonomic Assessment</h1>
 
-    <section class="step step-upload">
-      <h2><strong>Step 1:</strong> Add photo</h2>
-
-      <div class="views-row">
-        <!-- FRONT PREVIEW -->
-        <div class="view-card">
-          <div class="box-label">Front view</div>
-
-          <div class="preview-box" id="frontPreviewBox">
-            <img id="frontPreviewImg" alt="front sample" src="example/front view.png">
-          </div>
-
-          <input type="file" id="frontInput" accept="image/*" />
-        </div>
-
-        <!-- SIDE PREVIEW -->
-        <div class="view-card">
-          <div class="box-label">Side view</div>
-
-          <div class="preview-box" id="sidePreviewBox">
-            <img id="sidePreviewImg" alt="side sample" src="example/side view.png">
-          </div>
-
-          <input type="file" id="sideInput" accept="image/*" />
-        </div>
+  <section class="upload-section">
+    <div class="step">
+      <h2>Step 1: Upload Front Image</h2>
+      <input type="file" id="frontInput" accept="image/*" />
+      <div class="image-box">
+        <img id="frontPreview" src="examples/front.png" />
       </div>
-    </section>
+    </div>
 
-    <section class="step step-run">
-      <h2><strong>Step 2:</strong> Get result</h2>
-
-      <div class="controls">
-        <button id="runBtn" class="btn-primary" disabled>Run</button>
-        <div id="modelStatus" class="muted">Loading model...</div>
+    <div class="step">
+      <h2>Step 1: Upload Side Image</h2>
+      <input type="file" id="sideInput" accept="image/*" />
+      <div class="image-box">
+        <img id="sidePreview" src="examples/side.png" />
       </div>
+    </div>
+  </section>
 
-      <!-- result canvases appear here -->
-      <div class="views-row">
-        <div class="result-card">
-          <div class="box-label">Front result</div>
-          <div class="result-box" id="frontResultBox"><!-- canvas will be inserted here --></div>
-        </div>
+  <button id="runBtn">Run Detection</button>
 
-        <div class="result-card">
-          <div class="box-label">Side result</div>
-          <div class="result-box" id="sideResultBox"><!-- canvas will be inserted here --></div>
-        </div>
+  <section id="output-section">
+    <h2>Detection Result</h2>
+    <div class="result-row">
+      <div class="image-box">
+        <canvas id="frontCanvas"></canvas>
       </div>
-    </section>
+      <div class="image-box">
+        <canvas id="sideCanvas"></canvas>
+      </div>
+    </div>
 
-    <section class="step step-table">
-      <h2>Keypoints & Coordinates</h2>
-      <div id="resultsTable"></div>
-    </section>
-
-    <footer class="footer muted">
-      Example images live in `/examples/front.jpg` and `/examples/side.jpg` — replace them if you want different defaults.
-    </footer>
-  </main>
+    <table id="resultTable">
+      <thead>
+        <tr>
+          <th>Keypoint</th>
+          <th>Front (x,y)</th>
+          <th>Side (x,y)</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </section>
 
   <script src="app.js"></script>
 </body>
