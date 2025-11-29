@@ -1,48 +1,83 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<title>MoveNet Dual-View Analyzer</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Ergonomic Assessment — Dual View</title>
 
-<!-- CSS -->
-<link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="styles.css">
 
-<!-- TensorFlow.js + MoveNet -->
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.15.0"></script>
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection"></script>
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl"></script>
-
+  <!-- TFJS + Pose Detection -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.15.0/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl@4.15.0/dist/tf-backend-webgl.min.js"></script>
 </head>
 <body>
+  <main class="page">
+    <header class="header">
+      <h1>Ergonomic Assessment</h1>
+    </header>
 
-<div class="container">
-  <h1>MoveNet Dual-View Analyzer</h1>
+    <section class="step step-upload">
+      <h2><strong>Step 1:</strong> Add photo</h2>
 
-  <div class="upload-section">
-    <label>Front View Image</label>
-    <input type="file" id="frontInput" accept="image/*">
+      <div class="views-row">
+        <!-- FRONT PREVIEW -->
+        <div class="view-card">
+          <div class="box-label">Front view</div>
 
-    <label>Side View Image</label>
-    <input type="file" id="sideInput" accept="image/*">
+          <div class="preview-box" id="frontPreviewBox">
+            <img id="frontPreviewImg" alt="front sample" src="examples/front.jpg">
+          </div>
 
-    <button id="detectBtn">Run Detection</button>
-  </div>
+          <input type="file" id="frontInput" accept="image/*" />
+        </div>
 
-  <div class="canvas-section">
-    <div>
-      <h2>Front View</h2>
-      <canvas id="frontCanvas"></canvas>
-    </div>
-    <div>
-      <h2>Side View</h2>
-      <canvas id="sideCanvas"></canvas>
-    </div>
-  </div>
+        <!-- SIDE PREVIEW -->
+        <div class="view-card">
+          <div class="box-label">Side view</div>
 
-  <div id="results" class="results"></div>
-</div>
+          <div class="preview-box" id="sidePreviewBox">
+            <img id="sidePreviewImg" alt="side sample" src="examples/side.jpg">
+          </div>
 
-<!-- JS -->
-<script src="app.js"></script>
+          <input type="file" id="sideInput" accept="image/*" />
+        </div>
+      </div>
+    </section>
+
+    <section class="step step-run">
+      <h2><strong>Step 2:</strong> Get result</h2>
+
+      <div class="controls">
+        <button id="runBtn" class="btn-primary" disabled>Run</button>
+        <div id="modelStatus" class="muted">Loading model...</div>
+      </div>
+
+      <!-- result canvases appear here -->
+      <div class="views-row">
+        <div class="result-card">
+          <div class="box-label">Front result</div>
+          <div class="result-box" id="frontResultBox"><!-- canvas will be inserted here --></div>
+        </div>
+
+        <div class="result-card">
+          <div class="box-label">Side result</div>
+          <div class="result-box" id="sideResultBox"><!-- canvas will be inserted here --></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="step step-table">
+      <h2>Keypoints & Coordinates</h2>
+      <div id="resultsTable"></div>
+    </section>
+
+    <footer class="footer muted">
+      Example images live in `/examples/front.jpg` and `/examples/side.jpg` — replace them if you want different defaults.
+    </footer>
+  </main>
+
+  <script src="app.js"></script>
 </body>
 </html>
