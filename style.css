@@ -1,75 +1,104 @@
-body {
-  background: #f2f4f7;
-  margin: 0;
-  padding: 0;
-  font-family: Arial, sans-serif;
-  overflow-x: hidden;   /* prevent horizontal scroll */
+:root{
+  --preview-w: 480px;   /* change to desired preview width */
+  --preview-h: 360px;   /* change to desired preview height */
+  --accent: #4b6cff;
+  --muted: #6b6f76;
+  --card-bg: #fff;
 }
 
-.container {
-  width: 95%;
-  max-width: 1200px;
-  margin: auto;
-  padding: 20px;
+*{box-sizing:border-box}
+body{
+  margin:0;
+  font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+  background:#f7f8fb;
+  color:#111;
+  -webkit-font-smoothing:antialiased;
 }
 
-/* Upload Box */
-.upload-section {
-  background: white;
-  padding: 20px;
-  border-radius: 10px;
-  box-shadow: 0 0 8px rgba(0,0,0,0.1);
-  margin-bottom: 25px;
+.page{max-width:1200px;margin:18px auto;padding:18px;}
+
+.header{text-align:center;margin-bottom:14px;}
+.header h1{font-weight:600;font-size:44px;margin:8px 0;}
+
+.step{background:var(--card-bg);padding:20px;border-radius:10px;box-shadow:0 6px 18px rgba(12,18,26,0.05);margin-bottom:18px;}
+.step h2{margin:0 0 16px;font-size:22px}
+
+.views-row{display:flex;gap:30px;flex-wrap:wrap;align-items:flex-start;}
+
+/* each view card (preview + input) */
+.view-card{flex:1 1 45%;max-width:48%;min-width:260px;}
+.box-label{font-weight:600;margin-bottom:10px;}
+
+/* fixed preview box (shows default image or chosen file) */
+.preview-box{
+  width:var(--preview-w);
+  height:var(--preview-h);
+  max-width:100%;
+  background:#fff;
+  border:3px solid #111;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  overflow:hidden;
+  margin-bottom:12px;
+  border-radius:4px;
 }
 
-/* CANVAS AREA */
-.canvas-section {
-  display: flex;
-  justify-content: center;
-  gap: 20px;
-  flex-wrap: wrap;
-  width: 100%;
+/* preview image fits contained */
+.preview-box img{
+  display:block;
+  width:100%;
+  height:100%;
+  object-fit:contain;
 }
 
-.canvas-section div {
-  flex: 1 1 45%;
-  max-width: 45%;
-  text-align: center;
+/* file input */
+.view-card input[type=file]{display:inline-block;padding:8px 12px;border-radius:4px;border:1px solid #ccc;background:white;}
+
+/* run area */
+.controls{display:flex;align-items:center;gap:14px;margin-top:12px}
+.btn-primary{
+  background:var(--accent);
+  color:white;border:none;padding:12px 18px;border-radius:10px;font-weight:600;cursor:pointer;
+  box-shadow:0 6px 14px rgba(75,108,255,0.24);
+}
+.btn-primary:disabled{opacity:0.5;cursor:not-allowed;box-shadow:none}
+
+.muted{color:var(--muted);font-size:14px}
+
+/* results: canvas placed inside result-box (same size as preview-box) */
+.result-card{flex:1 1 45%;max-width:48%;min-width:260px}
+.result-box{
+  width:var(--preview-w);
+  height:var(--preview-h);
+  max-width:100%;
+  background:#fff;
+  border:3px solid #111;
+  margin-top:8px;
+  border-radius:4px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  overflow:hidden;
 }
 
-/* Auto-resize the canvas so images always fit screen height */
-canvas {
-  border: 1px solid #aaa;
-  background: white;
-
-  width: 100%;        /* Scale down automatically */
-  height: auto;       /* Keep proportions */
-  max-height: 45vh;   /* Ensures the canvas never exceeds 45% screen height */
-
-  object-fit: contain;
-  display: block;
-  margin: auto;
+/* canvases inside result-box will be scaled by JS (CSS keeps box fixed) */
+.result-box canvas{
+  width:100%;
+  height:100%;
+  display:block;
+  object-fit:contain;
 }
 
-/* Results Table */
-.results {
-  margin-top: 20px;
-  background: white;
-  padding: 20px;
-  border-radius: 10px;
-  box-shadow: 0 0 8px rgba(0,0,0,0.1);
-  overflow-x: auto;  /* Table scrolls, page does NOT */
-  max-height: 40vh;  /* Prevent giant tables */
-  overflow-y: auto;
-}
+/* table */
+#resultsTable{margin-top:12px;background:var(--card-bg);padding:12px;border-radius:8px}
+table{width:100%;border-collapse:collapse}
+th,td{border:1px solid #ddd;padding:8px;text-align:left}
+th{background:#fafafa}
 
-table {
-  border-collapse: collapse;
-  width: 100%;
-}
-
-td, th {
-  border: 1px solid #bbb;
-  padding: 6px;
-  font-size: 14px;
+/* responsive */
+@media (max-width:900px){
+  .views-row{flex-direction:column}
+  .view-card,.result-card{max-width:100%}
+  :root{--preview-w:360px;--preview-h:270px}
 }
