@@ -1,8 +1,7 @@
-// app.js - improved: runs detection at full res, displays scaled canvases to fit screen
+// app.js
+// MoveNet web UI logic: padding, detection, scaled render, integer coords table
 
-// ---------------------------
-// Config / Globals
-// ---------------------------
+// KEYPOINT NAMES (MoveNet 17)
 const KEYPOINT_NAMES = [
   "Nose","Left Eye","Right Eye","Left Ear","Right Ear",
   "Left Shoulder","Right Shoulder","Left Elbow","Right Elbow",
@@ -17,295 +16,295 @@ const SKELETON = [
 ];
 
 let detector = null;
+const runBtn = document.getElementById('runBtn');
+const modelStatus = document.getElementById('modelStatus');
 
-// UI refs
-const frontInput = document.getElementById("frontInput");
-const sideInput  = document.getElementById("sideInput");
-const runBtn     = document.getElementById("detectBtn");
-const frontCanvasElem = document.getElementById("frontCanvas");
-const sideCanvasElem  = document.getElementById("sideCanvas");
-const resultsDiv = document.getElementById("results");
+const frontInput = document.getElementById('frontInput');
+const sideInput = document.getElementById('sideInput');
+const frontPreviewImg = document.getElementById('frontPreviewImg');
+const sidePreviewImg = document.getElementById('sidePreviewImg');
 
-// Disable button until model loads
-runBtn.disabled = true;
+const frontResultBox = document.getElementById('frontResultBox');
+const sideResultBox  = document.getElementById('sideResultBox');
+const resultsTableDiv = document.getElementById('resultsTable');
 
-// ---------------------------
-// Load MoveNet model
-// ---------------------------
+// helper: read file to dataURL and set preview
+function setPreviewFromFile(file, imgElement){
+  if(!file) return;
+  const url = URL.createObjectURL(file);
+  imgElement.src = url;
+}
+
+// wire file inputs: replace preview image when user selects file
+frontInput.addEventListener('change', (e)=>{
+  const f = e.target.files[0];
+  if(f) setPreviewFromFile(f, frontPreviewImg);
+  updateRunButtonState();
+});
+sideInput.addEventListener('change', (e)=>{
+  const f = e.target.files[0];
+  if(f) setPreviewFromFile(f, sidePreviewImg);
+  updateRunButtonState();
+});
+
+function updateRunButtonState(){
+  const any = frontInput.files.length || sideInput.files.length || frontPreviewImg.src.includes('examples/') || sidePreviewImg.src.includes('examples/');
+  // only enable if model loaded and at least one image present
+  runBtn.disabled = !detector || (!frontInput.files.length && !sideInput.files.length && !frontPreviewImg.src && !sidePreviewImg.src && !sidePreviewImg.src);
+}
+
+// ------------------------------------------------------------------
+// load MoveNet model (client-side TFJS pose-detection)
+// ------------------------------------------------------------------
 async function loadModel(){
-  try {
+  modelStatus.textContent = 'Loading model...';
+  try{
     detector = await poseDetection.createDetector(
       poseDetection.SupportedModels.MoveNet,
       { modelType: poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING }
     );
-    console.log("MoveNet loaded");
+    modelStatus.textContent = 'Model loaded';
     runBtn.disabled = false;
-  } catch (e){
-    console.error("Failed to load model:", e);
-    alert("Model failed to load. Check console.");
+  }catch(err){
+    console.error('model load error', err);
+    modelStatus.textContent = 'Model load failed (check console)';
   }
 }
 loadModel();
 
-// ---------------------------
-// pad image to square (offscreen canvas)
-// returns {padCanvas, offsetX, offsetY, size, originalW, originalH}
-// ---------------------------
-function padToSquareImage(img){
-  const originalW = img.naturalWidth || img.width;
-  const originalH = img.naturalHeight || img.height;
-  const size = Math.max(originalW, originalH);
-  const padCanvas = document.createElement('canvas');
-  padCanvas.width = size;
-  padCanvas.height = size;
-  const ctx = padCanvas.getContext('2d');
+// ------------------------------------------------------------------
+// pad image to square (offscreen) and return canvas + offsets
+// ------------------------------------------------------------------
+function padToSquare(imgElement){
+  const w = imgElement.naturalWidth || imgElement.width;
+  const h = imgElement.naturalHeight || imgElement.height;
+  const size = Math.max(w, h);
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
 
-  // white bg
   ctx.fillStyle = 'white';
   ctx.fillRect(0,0,size,size);
 
-  const offsetX = Math.round((size - originalW) / 2);
-  const offsetY = Math.round((size - originalH) / 2);
+  const offsetX = Math.round((size - w)/2);
+  const offsetY = Math.round((size - h)/2);
+  ctx.drawImage(imgElement, offsetX, offsetY, w, h);
 
-  ctx.drawImage(img, offsetX, offsetY, originalW, originalH);
-  return { padCanvas, offsetX, offsetY, size, originalW, originalH };
+  return { canvas, offsetX, offsetY, size, originalW: w, originalH: h };
 }
 
-// ---------------------------
-// calculate display scale so canvas fits viewport nicely
-// keeps aspect (square)
-// returns scale (<=1)
-// ---------------------------
-function calcDisplayScale(originalSize){
-  // target constraints
-  const maxWidthPerCanvas = Math.max(240, Math.floor(window.innerWidth * 0.45));  // at least 240px
-  const maxHeightPerCanvas = Math.floor(window.innerHeight * 0.45); // e.g. 45vh
-
-  const scaleW = maxWidthPerCanvas / originalSize;
-  const scaleH = maxHeightPerCanvas / originalSize;
-  const scale = Math.min(scaleW, scaleH, 1.0);
-  return Math.max(scale, 0.15); // avoid extremely tiny; 15% minimum
+// ------------------------------------------------------------------
+// ensure keypoint x,y are pixels (if normalized 0..1 convert to pixels)
+// returns array of {x,y,score}
+// ------------------------------------------------------------------
+function normalizeKeypoints(kps, padSize){
+  return kps.map(k => {
+    // some models return x,y in pixels already; others normalized (0..1)
+    let x = k.x, y = k.y;
+    if(x <= 1.01 && y <= 1.01){ x = x * padSize; y = y * padSize; }
+    return { x: x, y: y, score: (k.score ?? 0) };
+  });
 }
 
-// ---------------------------
-// draw scaled padCanvas into a visible canvas and draw skeleton scaled
-// rawKps: array of keypoints in padCanvas pixel coordinates (x,y,score)
-// visibleCanvasElem: DOM canvas element to render into
-// returns scaledKeypoints (coords relative to visible canvas)
-// ---------------------------
-function renderScaled(padCanvas, rawKps, visibleCanvasElem, displayScale){
-  const visW = Math.round(padCanvas.width * displayScale);
-  const visH = Math.round(padCanvas.height * displayScale);
+// ------------------------------------------------------------------
+// compute display scale and render scaled canvas inside result box
+// we render the padded image scaled to fit the fixed result-box CSS dimensions
+// returns scaled keypoints as integers
+// ------------------------------------------------------------------
+function renderResult(padCanvas, rawKps, resultBox){
+  // calculate target display size (box CSS width / height)
+  const style = getComputedStyle(resultBox);
+  // note: CSS sets width/height in px via var; resultBox.clientWidth/Height reflect actual size
+  const displayW = resultBox.clientWidth;
+  const displayH = resultBox.clientHeight;
 
-  // set visible canvas internal resolution to scaled size
-  visibleCanvasElem.width = visW;
-  visibleCanvasElem.height = visH;
+  // create canvas to insert
+  const canvas = document.createElement('canvas');
+  // set internal resolution to padded size scaled down to fit (preserve aspect)
+  const scale = Math.min(displayW / padCanvas.width, displayH / padCanvas.height, 1.0);
+  const outW = Math.max(1, Math.round(padCanvas.width * scale));
+  const outH = Math.max(1, Math.round(padCanvas.height * scale));
+  canvas.width = outW;
+  canvas.height = outH;
+  // CSS display will fill the box due to styles; but internal resolution is outW/outH
+  canvas.style.width = '100%';
+  canvas.style.height = '100%';
 
-  // also make sure CSS width is 100% of parent for responsiveness (styles.css should handle)
-  visibleCanvasElem.style.width = '100%'; // let CSS control visual sizing within layout
-  visibleCanvasElem.style.height = 'auto';
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0,0,outW,outH);
+  ctx.drawImage(padCanvas, 0, 0, outW, outH);
 
-  const ctx = visibleCanvasElem.getContext('2d');
-  // draw scaled image
-  ctx.clearRect(0,0,visW,visH);
-  ctx.drawImage(padCanvas, 0, 0, visW, visH);
-
-  // scale keypoints
-  const scaledKps = rawKps.map((kp, i) => ({
-    index: i,
-    name: KEYPOINT_NAMES[i] ?? (`kp${i}`),
-    x: kp.x * displayScale,
-    y: kp.y * displayScale,
-    score: kp.score
-  }));
-
-  // draw skeleton and points
-  ctx.lineWidth = Math.max(2, Math.round(2 * displayScale));
+  // draw skeleton on top (use scaled coordinates)
+  ctx.lineWidth = Math.max(2, Math.round(2 * scale));
   ctx.strokeStyle = 'lime';
   ctx.fillStyle = 'red';
-  scaledKps.forEach(p=>{
+
+  // convert rawKps to scaled coords
+  const scaled = rawKps.map(k => ({
+    x: Math.round(k.x * scale),
+    y: Math.round(k.y * scale),
+    score: k.score
+  }));
+
+  // draw keypoints (small circles) and skeleton
+  scaled.forEach(pt => {
     ctx.beginPath();
-    ctx.arc(p.x, p.y, Math.max(3, 4 * displayScale), 0, Math.PI*2);
+    ctx.arc(pt.x, pt.y, Math.max(3, Math.round(4*scale)), 0, Math.PI*2);
     ctx.fill();
   });
 
-  SKELETON.forEach(([a,b])=>{
-    const A = scaledKps[a], B = scaledKps[b];
-    if (!A || !B) return;
-    if ((A.score||0) > 0.15 && (B.score||0) > 0.15){
-      ctx.beginPath();
-      ctx.moveTo(A.x, A.y);
-      ctx.lineTo(B.x, B.y);
-      ctx.stroke();
-    }
+  SKELETON.forEach(pair => {
+    const a = scaled[pair[0]];
+    const b = scaled[pair[1]];
+    if(!a || !b) return;
+    if((a.score || 0) < 0.05 || (b.score || 0) < 0.05) return;
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+    ctx.stroke();
   });
 
-  return scaledKps;
+  // attach canvas to resultBox (clear previous)
+  resultBox.innerHTML = '';
+  resultBox.appendChild(canvas);
+
+  // return scaled integer coords with keypoint names
+  return scaled.map((p,i) => ({ name: KEYPOINT_NAMES[i], x: Math.round(p.x), y: Math.round(p.y), score: p.score }));
 }
 
-// ---------------------------
-// angle helpers
-// returns number as string with 2 decimals or '-' if invalid
-// ---------------------------
-function angleAtB(A,B,C){
-  if (!A||!B||!C) return '-';
+// ------------------------------------------------------------------
+// compute angle at B formed by A-B-C. returns number with 2 decimals (but we will not display decimals)
+function computeAngle(A,B,C){
+  if(!A||!B||!C) return null;
   const ABx = A.x - B.x, ABy = A.y - B.y;
   const CBx = C.x - B.x, CBy = C.y - B.y;
-  const mag1 = Math.hypot(ABx, ABy), mag2 = Math.hypot(CBx, CBy);
-  if (mag1 < 1e-6 || mag2 < 1e-6) return '-';
-  let cosv = (ABx*CBx + ABy*CBy) / (mag1*mag2);
+  const dot = ABx*CBx + ABy*CBy;
+  const mag1 = Math.hypot(ABx, ABy);
+  const mag2 = Math.hypot(CBx, CBy);
+  if(mag1 < 1e-6 || mag2 < 1e-6) return null;
+  let cosv = dot / (mag1*mag2);
   cosv = Math.max(-1, Math.min(1, cosv));
-  const ang = Math.acos(cosv) * 180 / Math.PI;
-  return ang.toFixed(2);
+  const rad = Math.acos(cosv);
+  return (rad * 180 / Math.PI);
 }
 
-// ---------------------------
-// core pipeline for one input file => returns object with scaled keypoints and original keypoints
-// ---------------------------
-async function processFileToScaled(file, visibleCanvasElem){
-  // load image element
-  const img = new Image();
-  img.src = URL.createObjectURL(file);
-  await img.decode();
-
-  // create padded offscreen canvas
-  const padInfo = padToSquareImage(img);
-  const padCanvas = padInfo.padCanvas;
-
-  // run detector on padCanvas (full-res)
-  const poses = await detector.estimatePoses(padCanvas, { flipHorizontal: false });
-  if (!poses || poses.length === 0) {
-    throw new Error('No pose detected');
+// ------------------------------------------------------------------
+// table with integers - columns: Keypoint | Front co-or | Side co-or
+// frontCoords and sideCoords arrays contain objects {name,x,y,score} or null
+// ------------------------------------------------------------------
+function buildResultsTable(frontCoords, sideCoords){
+  let html = '<table><thead><tr><th>Keypoint</th><th>Front co-or</th><th>Side co-or</th></tr></thead><tbody>';
+  for(let i=0;i<17;i++){
+    const name = KEYPOINT_NAMES[i];
+    const f = frontCoords && frontCoords[i] ? `${frontCoords[i].x}, ${frontCoords[i].y}` : '-';
+    const s = sideCoords && sideCoords[i] ? `${sideCoords[i].x}, ${sideCoords[i].y}` : '-';
+    html += `<tr><td>${name}</td><td>${f}</td><td>${s}</td></tr>`;
   }
-
-  // MoveNet v0 returns keypoints array with x,y in pixels relative to input image (padCanvas)
-  const raw = poses[0].keypoints.map((kp,i) => ({
-    x: kp.x, y: kp.y, score: (kp.score ?? 0)
-  }));
-
-  // compute display scale
-  const displayScale = calcDisplayScale(padCanvas.width);
-
-  // render scaled image + skeleton and get scaled keypoints
-  const scaledKps = renderScaled(padCanvas, raw, visibleCanvasElem, displayScale);
-
-  // We return both scaled and raw (raw useful for measurements in pixel-space if needed)
-  return { scaledKps, rawKps: raw, padSize: padCanvas.width, displayScale };
-}
-
-// ---------------------------
-// prepare table HTML (2-decimals)
-function makeResultsTable(frontResult, sideResult){
-  // build keypoint rows
-  const rows = [];
-  for (let i=0;i<17;i++){
-    const name = KEYPOINT_NAMES[i] ?? `kp${i}`;
-
-    let frontXY = '-';
-    let sideXY = '-';
-    let fconf = '-';
-    let sconf = '-';
-
-    if (frontResult && frontResult.scaledKps[i]){
-      const p = frontResult.scaledKps[i];
-      frontXY = `${p.x.toFixed(2)}, ${p.y.toFixed(2)}`;
-      fconf = p.score.toFixed(2);
-    }
-    if (sideResult && sideResult.scaledKps[i]){
-      const p = sideResult.scaledKps[i];
-      sideXY = `${p.x.toFixed(2)}, ${p.y.toFixed(2)}`;
-      sconf = p.score.toFixed(2);
-    }
-
-    rows.push(`<tr>
-      <td>${name}</td>
-      <td>${frontXY} <div class="muted">(${fconf})</div></td>
-      <td>${sideXY} <div class="muted">(${sconf})</div></td>
-    </tr>`);
-  }
-
-  // compute angles (choose best view: elbows from front, knees from side as simple heuristic)
-  function computeAnglesFromScaled(result){
-    if (!result) return null;
-    const k = result.scaledKps;
-    return {
-      leftElbow: angleAtB(k[5], k[7], k[9]),
-      rightElbow: angleAtB(k[6], k[8], k[10]),
-      leftKnee: angleAtB(k[11], k[13], k[15]),
-      rightKnee: angleAtB(k[12], k[14], k[16])
-    };
-  }
-
-  const anglesF = computeAnglesFromScaled(frontResult);
-  const anglesS = computeAnglesFromScaled(sideResult);
-
-  // Choose best: prefer whichever has higher average confidence for involved triple
-  function pick(angleName, tripleIndices){
-    const [a,b,c] = tripleIndices;
-    let fVal = '-', sVal = '-', chosen='-';
-    if (anglesF) fVal = anglesF[angleName];
-    if (anglesS) sVal = anglesS[angleName];
-    // pick by presence
-    if (fVal !== '-' && sVal !== '-'){
-      // use mean score as tiebreak
-      const fmean = (frontResult.scaledKps[a].score + frontResult.scaledKps[b].score + frontResult.scaledKps[c].score)/3;
-      const smean = (sideResult.scaledKps[a].score + sideResult.scaledKps[b].score + sideResult.scaledKps[c].score)/3;
-      chosen = (fmean >= smean) ? `front (${fVal})` : `side (${sVal})`;
-    } else if (fVal !== '-') chosen = `front (${fVal})`;
-    else if (sVal !== '-') chosen = `side (${sVal})`;
-    else chosen = '-';
-    return chosen;
-  }
-
-  const anglesSummary = {
-    Left_Elbow: pick('leftElbow', [5,7,9]),
-    Right_Elbow: pick('rightElbow', [6,8,10]),
-    Left_Knee: pick('leftKnee', [11,13,15]),
-    Right_Knee: pick('rightKnee', [12,14,16])
-  };
-
-  const html = `
-    <div style="overflow:auto">
-      <table style="width:100%; border-collapse:collapse">
-        <thead><tr><th>Keypoint</th><th>Front (x,y) [conf]</th><th>Side (x,y) [conf]</th></tr></thead>
-        <tbody>${rows.join('')}</tbody>
-      </table>
-      <h3>Selected Angles (2-decimals)</h3>
-      <pre>${JSON.stringify(anglesSummary, null, 2)}</pre>
-    </div>
-  `;
+  html += '</tbody></table>';
   return html;
 }
 
-// ---------------------------
-// MAIN button handler
-// ---------------------------
+// ------------------------------------------------------------------
+// main run handler
+// ------------------------------------------------------------------
 runBtn.addEventListener('click', async () => {
-  try {
+  try{
     runBtn.disabled = true;
     runBtn.textContent = 'Running...';
-    resultsDiv.innerHTML = '';
+    resultsTableDiv.innerHTML = '';
 
-    if (!detector) throw new Error('Model not loaded yet.');
+    // gather image elements (prefer uploaded file preview; if none, default example)
+    const frontHas = frontInput.files && frontInput.files[0];
+    const sideHas  = sideInput.files && sideInput.files[0];
 
-    const frontFile = frontInput.files[0];
-    const sideFile  = sideInput.files[0];
-    if (!frontFile || !sideFile) throw new Error('Upload both front and side images.');
+    if(!frontHas && !sideHas){
+      alert('Upload at least one image (front or side).');
+      runBtn.disabled = false;
+      runBtn.textContent = 'Run';
+      return;
+    }
 
-    // process both files (they run detection at full res, then render scaled)
-    const frontRes = await processFileToScaled(frontFile, frontCanvasElem);
-    const sideRes  = await processFileToScaled(sideFile, sideCanvasElem);
+    let frontCoords = null, sideCoords = null;
 
-    // compose table and angles
-    const html = makeResultsTable(frontRes, sideRes);
-    resultsDiv.innerHTML = html;
+    // ---------- FRONT ----------
+    if(frontHas){
+      // create an image element and wait for decode
+      const file = frontInput.files[0];
+      const img = new Image();
+      img.src = URL.createObjectURL(file);
+      await img.decode();
 
-    runBtn.disabled = false;
-    runBtn.textContent = 'Run Detection';
-  } catch (err) {
+      const pad = padToSquare(img);
+      // run detection on pad.canvas (full res)
+      const poses = await detector.estimatePoses(pad.canvas);
+      if(!poses || poses.length === 0) {
+        alert('No pose detected on front image.');
+      } else {
+        const raw = normalizeKeypoints(poses[0].keypoints, pad.size);
+        // render result into frontResultBox
+        frontCoords = renderResult(pad.canvas, raw, frontResultBox);
+      }
+    } else {
+      // user didn't upload front; but maybe preview contains default sample - still allow detection using preview image element
+      // We'll run only if preview image isn't blank and the user wants
+      const imgEl = frontPreviewImg;
+      if(imgEl && imgEl.src){
+        // if default image path (examples) we still process
+        const pad = padToSquare(imgEl);
+        const poses = await detector.estimatePoses(pad.canvas);
+        if(poses && poses.length) {
+          const raw = normalizeKeypoints(poses[0].keypoints, pad.size);
+          frontCoords = renderResult(pad.canvas, raw, frontResultBox);
+        }
+      }
+    }
+
+    // ---------- SIDE ----------
+    if(sideHas){
+      const file = sideInput.files[0];
+      const img = new Image();
+      img.src = URL.createObjectURL(file);
+      await img.decode();
+
+      const pad = padToSquare(img);
+      const poses = await detector.estimatePoses(pad.canvas);
+      if(!poses || poses.length === 0) {
+        alert('No pose detected on side image.');
+      } else {
+        const raw = normalizeKeypoints(poses[0].keypoints, pad.size);
+        sideCoords = renderResult(pad.canvas, raw, sideResultBox);
+      }
+    } else {
+      const imgEl = sidePreviewImg;
+      if(imgEl && imgEl.src){
+        const pad = padToSquare(imgEl);
+        const poses = await detector.estimatePoses(pad.canvas);
+        if(poses && poses.length) {
+          const raw = normalizeKeypoints(poses[0].keypoints, pad.size);
+          sideCoords = renderResult(pad.canvas, raw, sideResultBox);
+        }
+      }
+    }
+
+    // build table (integer coords)
+    resultsTableDiv.innerHTML = buildResultsTable(frontCoords, sideCoords);
+
+  }catch(err){
     console.error(err);
-    alert('Error: ' + (err.message || err));
+    alert('Error during detection — see console.');
+  }finally{
     runBtn.disabled = false;
-    runBtn.textContent = 'Run Detection';
+    runBtn.textContent = 'Run';
   }
 });
+
+// enable run when model loaded and at least one preview exists
+const observer = new MutationObserver(()=>updateRunState());
+function updateRunState(){
+  const hasFile = (frontInput.files && frontInput.files.length) || (sideInput.files && sideInput.files.length);
+  const hasPreview = (frontPreviewImg && frontPreviewImg.src) || (sidePreviewImg && sidePreviewImg.src);
+  runBtn.disabled = !(detector && (hasFile || hasPreview));
+}
+function isModelReady(){ return !!detector; }
+setInterval(()=>{ if(detector) updateRunState(); }, 800);
