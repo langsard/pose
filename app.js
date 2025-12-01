@@ -1,9 +1,7 @@
-// app.js
-// Loads MoveNet (TFJS pose-detection), pads images, runs detection,
-// draws skeleton on fixed-size result canvas, prints integer coords table,
-// computes a few joint angles (elbow, knee) from each available view.
+// app.js - MoveNet Thunder integration, padded input, draw skeleton on fixed boxes,
+// integer coords table, basic elbow/knee angle calculations.
 
-// -------- CONFIG / KEYPOINTS ----------------
+// KEYPOINT NAMES (MoveNet 17)
 const KEYPOINT_NAMES = [
   "Nose","Left Eye","Right Eye","Left Ear","Right Ear",
   "Left Shoulder","Right Shoulder","Left Elbow","Right Elbow",
@@ -17,7 +15,7 @@ const SKELETON = [
   [5,11],[6,12],[11,12],[11,13],[13,15],[12,14],[14,16]
 ];
 
-// -------- DOM elements ----------------
+// DOM
 const frontInput = document.getElementById('frontInput');
 const sideInput = document.getElementById('sideInput');
 const frontPreviewImg = document.getElementById('frontPreviewImg');
@@ -33,20 +31,21 @@ const anglesSummaryDiv = document.getElementById('anglesSummary');
 
 let detector = null;
 
-// -------- Utilities ----------------
+// Set preview image from file
 function setPreviewFromFile(file, imgElement){
   if(!file) return;
   const url = URL.createObjectURL(file);
   imgElement.src = url;
 }
 
+// Update run button state
 function updateRunButtonState(){
-  const hasPreview = (frontInput.files && frontInput.files.length) || (sideInput.files && sideInput.files.length) ||
-    (frontPreviewImg && frontPreviewImg.src) || (sidePreviewImg && sidePreviewImg.src);
-  runBtn.disabled = !detector || !hasPreview;
+  const hasFile = (frontInput.files && frontInput.files.length) || (sideInput.files && sideInput.files.length);
+  const hasPreview = (frontPreviewImg && frontPreviewImg.src) || (sidePreviewImg && sidePreviewImg.src);
+  runBtn.disabled = !detector || !(hasFile || hasPreview);
 }
 
-// create offscreen canvas padded to square (white background) and return metadata
+// Pad image to square and return canvas + metadata
 function padToSquare(imgElement){
   const w = imgElement.naturalWidth || imgElement.width;
   const h = imgElement.naturalHeight || imgElement.height;
@@ -66,9 +65,8 @@ function padToSquare(imgElement){
   return { canvas, offsetX, offsetY, size, originalW: w, originalH: h };
 }
 
-// normalize keypoints: ensure x,y are pixel coordinates for padded canvas
+// Normalize keypoints (if normalized 0..1 convert to pixels on pad canvas)
 function normalizeKeypoints(kps, padSize){
-  // Many detectors return pixels when given canvas input; but if values are in [0,1] convert
   return kps.map(k => {
     let x = k.x, y = k.y;
     if(x <= 1.01 && y <= 1.01){
@@ -79,76 +77,54 @@ function normalizeKeypoints(kps, padSize){
   });
 }
 
-// render result: draw padded canvas scaled to result box and overlay skeleton.
-// returns array of integer coords in result canvas space or null if no detection.
+// Render result into fixed-size result box; draw padded image scaled to fit and overlay skeleton
 function renderResult(padCanvas, kpArray, resultBox){
-  // remove previous content
   resultBox.innerHTML = '';
 
-  // create canvas the same CSS pixel size as the box
   const displayW = resultBox.clientWidth;
   const displayH = resultBox.clientHeight;
 
   const canvas = document.createElement('canvas');
-  // choose internal resolution to preserve clarity (use CSS size)
   canvas.width = displayW;
   canvas.height = displayH;
   canvas.style.width = '100%';
   canvas.style.height = '100%';
-
   const ctx = canvas.getContext('2d');
-  ctx.clearRect(0,0,canvas.width,canvas.height);
 
-  // scale factor to draw padCanvas into canvas (fit contain)
   const scale = Math.min(canvas.width / padCanvas.width, canvas.height / padCanvas.height);
   const drawW = padCanvas.width * scale;
   const drawH = padCanvas.height * scale;
   const dx = (canvas.width - drawW)/2;
   const dy = (canvas.height - drawH)/2;
 
-  ctx.drawImage(padCanvas, 0, 0, padCanvas.width, padCanvas.height, dx, dy, drawW, drawH);
+  // draw padded image
+  ctx.drawImage(padCanvas, 0,0, padCanvas.width, padCanvas.height, dx, dy, drawW, drawH);
 
-  // transform keypoints to displayed canvas coordinates
-  const scaled = kpArray.map(k => {
-    return {
-      x: Math.round(dx + k.x * scale),
-      y: Math.round(dy + k.y * scale),
-      score: k.score
-    };
-  });
+  // transform keypoints to canvas coords
+  const scaled = kpArray.map(k => ({ x: Math.round(dx + k.x * scale), y: Math.round(dy + k.y * scale), score: k.score }));
 
-  // draw skeleton lines
+  // draw skeleton
   ctx.lineWidth = Math.max(2, Math.round(2 * scale));
   ctx.strokeStyle = 'lime';
   ctx.fillStyle = 'red';
-
-  SKELETON.forEach(pair => {
-    const a = scaled[pair[0]];
-    const b = scaled[pair[1]];
+  SKELETON.forEach(pair=>{
+    const a = scaled[pair[0]]; const b = scaled[pair[1]];
     if(!a || !b) return;
-    // optional: skip low confidence points
     if((a.score||0) < 0.05 || (b.score||0) < 0.05) return;
-    ctx.beginPath();
-    ctx.moveTo(a.x, a.y);
-    ctx.lineTo(b.x, b.y);
-    ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke();
   });
-
-  // draw keypoint dots
-  scaled.forEach(pt=>{
-    if((pt.score||0) < 0.05) return;
-    ctx.beginPath();
-    ctx.arc(pt.x, pt.y, 4, 0, Math.PI*2);
-    ctx.fill();
+  // draw keypoints
+  scaled.forEach(p=>{
+    if((p.score||0) < 0.05) return;
+    ctx.beginPath(); ctx.arc(p.x,p.y,4,0,Math.PI*2); ctx.fill();
   });
 
   resultBox.appendChild(canvas);
-
-  // return integer coords relative to the displayed canvas
+  // return integer coords in displayed canvas space
   return scaled.map(p => ({ x: Math.round(p.x), y: Math.round(p.y), score: p.score }));
 }
 
-// angle at B from A-B-C (degrees)
+// compute angle at B from A-B-C in degrees
 function computeAngle(A,B,C){
   if(!A||!B||!C) return null;
   const ABx = A.x - B.x, ABy = A.y - B.y;
@@ -163,7 +139,7 @@ function computeAngle(A,B,C){
   return (rad * 180 / Math.PI);
 }
 
-// Build results table with integer coords, columns: Keypoint | Front co-or | Side co-or
+// build integer coords table
 function buildResultsTable(frontCoords, sideCoords){
   let html = '<table><thead><tr><th>Keypoint</th><th>Front co-or</th><th>Side co-or</th></tr></thead><tbody>';
   for(let i=0;i<KEYPOINT_NAMES.length;i++){
@@ -176,10 +152,8 @@ function buildResultsTable(frontCoords, sideCoords){
   return html;
 }
 
-// compute a small set of angles (we pick common ergonomic joints):
-// left elbow (shoulder-elbow-wrist), right elbow, left knee (hip-knee-ankle), right knee
+// compute elbow/knee angles (rounded integers) from coords array (17 elements)
 function computeAnglesFromCoords(coords){
-  // coords: array of 17 points {x,y}
   const idx = {
     leftShoulder:5, rightShoulder:6,
     leftElbow:7, rightElbow:8,
@@ -188,136 +162,17 @@ function computeAnglesFromCoords(coords){
     leftKnee:13, rightKnee:14,
     leftAnkle:15, rightAnkle:16
   };
-  const results = {};
-  function safe(i){ return coords && coords[i] ? coords[i] : null; }
+  const res = {};
+  const safe = i => coords && coords[i] ? coords[i] : null;
   const L_elbow = computeAngle(safe(idx.leftShoulder), safe(idx.leftElbow), safe(idx.leftWrist));
   const R_elbow = computeAngle(safe(idx.rightShoulder), safe(idx.rightElbow), safe(idx.rightWrist));
   const L_knee  = computeAngle(safe(idx.leftHip), safe(idx.leftKnee), safe(idx.leftAnkle));
   const R_knee  = computeAngle(safe(idx.rightHip), safe(idx.rightKnee), safe(idx.rightAnkle));
-  if(L_elbow!=null) results.leftElbow = Math.round(L_elbow);
-  if(R_elbow!=null) results.rightElbow = Math.round(R_elbow);
-  if(L_knee!=null) results.leftKnee = Math.round(L_knee);
-  if(R_knee!=null) results.rightKnee = Math.round(R_knee);
-  return results;
-}
-
-// -------- Model loading ----------------
-async function loadModel(){
-  modelStatus.textContent = 'Loading MoveNet (client)...';
-  try{
-    await tf.setBackend('webgl'); // use webgl if available
-    detector = await poseDetection.createDetector(
-      poseDetection.SupportedModels.MoveNet,
-      { modelType: poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING }
-    );
-    modelStatus.textContent = 'Model loaded';
-    updateRunButtonState();
-  }catch(err){
-    console.error('Model load failed:', err);
-    modelStatus.textContent = 'Model load failed (see console)';
-  }
-}
-
-// -------- Wiring file inputs ------------
-frontInput.addEventListener('change', (e)=>{
-  const f = e.target.files[0];
-  if(f) setPreviewFromFile(f, frontPreviewImg);
-  updateRunButtonState();
-});
-sideInput.addEventListener('change', (e)=>{
-  const f = e.target.files[0];
-  if(f) setPreviewFromFile(f, sidePreviewImg);
-  updateRunButtonState();
-});
-
-// re-check run button when previews change
-frontPreviewImg.addEventListener('load', updateRunButtonState);
-sidePreviewImg.addEventListener('load', updateRunButtonState);
-
-// -------- Main run handler ----------
-runBtn.addEventListener('click', async () => {
-  if(!detector){
-    alert('Model not ready yet.');
-    return;
-  }
-  runBtn.disabled = true;
-  runBtn.textContent = 'Running...';
-  resultsTableDiv.innerHTML = '';
-  anglesSummaryDiv.innerHTML = '';
-
-  try{
-    let frontCoords=null, sideCoords=null;
-
-    // FRONT processing - only if there's a preview image that is not empty
-    if(frontPreviewImg && frontPreviewImg.src){
-      // create pad canvas
-      await ensureImageDecoded(frontPreviewImg);
-      const pad = padToSquare(frontPreviewImg);
-      const poses = await detector.estimatePoses(pad.canvas, { maxPoses: 1, flipHorizontal: false });
-      if(poses && poses.length){
-        const kps = normalizeKeypoints(poses[0].keypoints, pad.size);
-        frontCoords = renderResult(pad.canvas, kps, frontResultBox);
-      } else {
-        frontResultBox.innerHTML = '<div style="color:#c33;padding:8px">No pose detected</div>';
-      }
-    }
-
-    // SIDE processing
-    if(sidePreviewImg && sidePreviewImg.src){
-      await ensureImageDecoded(sidePreviewImg);
-      const pad = padToSquare(sidePreviewImg);
-      const poses = await detector.estimatePoses(pad.canvas, { maxPoses: 1, flipHorizontal: false });
-      if(poses && poses.length){
-        const kps = normalizeKeypoints(poses[0].keypoints, pad.size);
-        sideCoords = renderResult(pad.canvas, kps, sideResultBox);
-      } else {
-        sideResultBox.innerHTML = '<div style="color:#c33;padding:8px">No pose detected</div>';
-      }
-    }
-
-    // Build & show table
-    resultsTableDiv.innerHTML = buildResultsTable(frontCoords, sideCoords);
-
-    // compute angles: if both available compute and show both; else show from whichever view exists
-    let anglesHtml = '<strong>Angles (degrees):</strong><div style="margin-top:8px">';
-    if(frontCoords) {
-      const aFront = computeAnglesFromCoords(mapToModelCoords(frontCoords));
-      anglesHtml += `<div><em>Front:</em> ${formatAngles(aFront)}</div>`;
-    }
-    if(sideCoords) {
-      const aSide = computeAnglesFromCoords(mapToModelCoords(sideCoords));
-      anglesHtml += `<div><em>Side:</em> ${formatAngles(aSide)}</div>`;
-    }
-    anglesHtml += '</div>';
-    anglesSummaryDiv.innerHTML = anglesHtml;
-
-  }catch(err){
-    console.error(err);
-    alert('Error during detection — see console');
-  }finally{
-    runBtn.disabled = false;
-    runBtn.textContent = 'Run';
-  }
-});
-
-// helper: ensure image .src is decoded before use
-async function ensureImageDecoded(img){
-  if(img.decode) {
-    try { await img.decode(); } catch(err) { /* ignore */ }
-  }
-}
-
-// map displayed coords back to a reasonable model-space array (17 elements), filling missing with nulls
-function mapToModelCoords(displayCoords){
-  // displayCoords is an array of 17 objects {x,y,score} in canvas space; we can use them directly for angle math.
-  // Build an array with indexes matching KEYPOINT_NAMES keeping x,y or null.
-  const arr = new Array(KEYPOINT_NAMES.length).fill(null);
-  if(!displayCoords) return arr;
-  for(let i=0;i<displayCoords.length && i<KEYPOINT_NAMES.length;i++){
-    const p = displayCoords[i];
-    if(p && typeof p.x !== 'undefined') arr[i] = { x: p.x, y: p.y };
-  }
-  return arr;
+  if(L_elbow!=null) res.leftElbow = Math.round(L_elbow);
+  if(R_elbow!=null) res.rightElbow = Math.round(R_elbow);
+  if(L_knee!=null) res.leftKnee = Math.round(L_knee);
+  if(R_knee!=null) res.rightKnee = Math.round(R_knee);
+  return res;
 }
 
 function formatAngles(obj){
@@ -330,9 +185,123 @@ function formatAngles(obj){
   return parts.join(' · ');
 }
 
-// initial model load
+// Wait for image decode helper
+async function ensureImageDecoded(img){
+  if(img.decode) {
+    try { await img.decode(); } catch(e) { /* ignore */ }
+  }
+}
+
+// ---------------- Model loading (MoveNet Thunder) ----------------
+async function loadModel(){
+  modelStatus.textContent = 'Loading MoveNet Thunder...';
+  try {
+    // try webgl backend first
+    try { await tf.setBackend('webgl'); await tf.ready(); }
+    catch(e){ console.warn('webgl backend failed, trying wasm backend', e); try { await tf.setBackend('wasm'); await tf.ready(); } catch(e2){ console.warn('wasm backend failed', e2); } }
+
+    if(typeof poseDetection === 'undefined'){
+      throw new Error('poseDetection library (tfjs-models/pose-detection) not found. Check imports.');
+    }
+
+    detector = await poseDetection.createDetector(
+      poseDetection.SupportedModels.MoveNet,
+      { modelType: poseDetection.movenet.modelType.SINGLEPOSE_THUNDER }
+    );
+
+    modelStatus.textContent = 'Model loaded (MoveNet Thunder)';
+    updateRunButtonState();
+  } catch (err) {
+    console.error('Model load failed:', err);
+    modelStatus.textContent = 'Model load failed — check console';
+    detector = null;
+    updateRunButtonState();
+  }
+}
 loadModel();
 
-// make sure run button reacts to model load / preview changes
-const checkInterval = setInterval(()=>{ updateRunButtonState(); }, 700);
-window.addEventListener('beforeunload', ()=>clearInterval(checkInterval));
+// ---------------- Input wiring ----------------
+frontInput.addEventListener('change', e => {
+  const f = e.target.files[0];
+  if(f) setPreviewFromFile(f, frontPreviewImg);
+  updateRunButtonState();
+});
+sideInput.addEventListener('change', e => {
+  const f = e.target.files[0];
+  if(f) setPreviewFromFile(f, sidePreviewImg);
+  updateRunButtonState();
+});
+
+frontPreviewImg.addEventListener('load', updateRunButtonState);
+sidePreviewImg.addEventListener('load', updateRunButtonState);
+
+// ---------------- Main run handler ----------------
+runBtn.addEventListener('click', async () => {
+  if(!detector){
+    alert('Model not ready. See model status or console.');
+    return;
+  }
+  runBtn.disabled = true;
+  runBtn.textContent = 'Running...';
+  resultsTableDiv.innerHTML = '';
+  anglesSummaryDiv.innerHTML = '';
+
+  try {
+    let frontCoords=null, sideCoords=null;
+
+    // FRONT
+    if(frontPreviewImg && frontPreviewImg.src){
+      await ensureImageDecoded(frontPreviewImg);
+      const pad = padToSquare(frontPreviewImg);
+      const poses = await detector.estimatePoses(pad.canvas, { maxPoses: 1, flipHorizontal: false });
+      if(poses && poses.length){
+        const kps = normalizeKeypoints(poses[0].keypoints, pad.size);
+        frontCoords = renderResult(pad.canvas, kps, frontResultBox);
+      } else {
+        frontResultBox.innerHTML = '<div style="color:#c33;padding:8px">No pose detected</div>';
+      }
+    }
+
+    // SIDE
+    if(sidePreviewImg && sidePreviewImg.src){
+      await ensureImageDecoded(sidePreviewImg);
+      const pad = padToSquare(sidePreviewImg);
+      const poses = await detector.estimatePoses(pad.canvas, { maxPoses: 1, flipHorizontal: false });
+      if(poses && poses.length){
+        const kps = normalizeKeypoints(poses[0].keypoints, pad.size);
+        sideCoords = renderResult(pad.canvas, kps, sideResultBox);
+      } else {
+        sideResultBox.innerHTML = '<div style="color:#c33;padding:8px">No pose detected</div>';
+      }
+    }
+
+    // table and angles
+    resultsTableDiv.innerHTML = buildResultsTable(frontCoords, sideCoords);
+    let anglesHtml = '<strong>Angles (degrees):</strong><div style="margin-top:8px">';
+    if(frontCoords) anglesHtml += `<div><em>Front:</em> ${formatAngles(computeAnglesFromCoords(mapToModelCoords(frontCoords)))}</div>`;
+    if(sideCoords)  anglesHtml += `<div><em>Side:</em>  ${formatAngles(computeAnglesFromCoords(mapToModelCoords(sideCoords)))}</div>`;
+    anglesHtml += '</div>';
+    anglesSummaryDiv.innerHTML = anglesHtml;
+
+  } catch(err){
+    console.error('Detection failed:', err);
+    alert('Detection error — see console.');
+  } finally {
+    runBtn.disabled = false;
+    runBtn.textContent = 'Run';
+  }
+});
+
+// map displayed coords array to model-indexed array for computeAnglesFromCoords
+function mapToModelCoords(displayCoords){
+  const arr = new Array(KEYPOINT_NAMES.length).fill(null);
+  if(!displayCoords) return arr;
+  for(let i=0;i<displayCoords.length && i<KEYPOINT_NAMES.length;i++){
+    const p = displayCoords[i];
+    if(p && typeof p.x !== 'undefined') arr[i] = { x: p.x, y: p.y };
+  }
+  return arr;
+}
+
+// keep run button state in sync
+setInterval(()=>updateRunButtonState(), 700);
