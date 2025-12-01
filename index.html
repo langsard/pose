@@ -3,23 +3,30 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>ErgoPose — Ergonomic Assessment</title>
+  <title>ErgoPose — Ergonomic Assessment (MoveNet Thunder)</title>
 
   <link rel="stylesheet" href="style.css">
 
-  <!-- TFJS + Pose Detection (MoveNet) -->
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.15.0/dist/tf.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl@4.15.0/dist/tf-backend-webgl.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@0.0.7/dist/pose-detection.min.js"></script>
+  <!-- TFJS core + backends + pose-detection -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core@4.23.0/dist/tf-core.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter@4.23.0/dist/tf-converter.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl@4.23.0/dist/tf-backend-webgl.min.js"></script>
+
+  <!-- Pose Detection -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@0.0.8/dist/pose-detection.min.js"></script>
+
+  <!-- Optional: mediapipe (not required for MoveNet but safe to include) -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.1646424915/pose.js"></script>
 </head>
 <body>
   <main class="page">
     <header class="header">
       <h1>Ergonomic Assessment</h1>
+      <p class="muted">MoveNet Thunder — higher accuracy for posture assessment</p>
     </header>
 
     <section class="step step-upload">
-      <h2><strong>Step 1:</strong> Add picture</h2>
+      <h2><strong>Step 1:</strong> Add photo</h2>
 
       <div class="views-row">
         <!-- FRONT PREVIEW -->
@@ -70,11 +77,10 @@
     <section class="step step-table">
       <h2>Keypoints & Coordinates</h2>
       <div id="resultsTable"></div>
-
       <div id="anglesSummary" style="margin-top:12px;"></div>
     </section>
 
-    <footer class="footer muted">
+    <footer class="footer muted" style="text-align:center;margin-top:18px;">
       Example images: <code>examples/front.png</code> and <code>examples/side.png</code>.
     </footer>
   </main>
