@@ -3,9 +3,18 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>ErgoPose — Ergonomic Assessment (MoveNet Thunder)</title>
+  <title>Ergonomic Assessment (MoveNet Thunder)</title>
 
   <link rel="stylesheet" href="style.css">
+
+  <!-- TensorFlow.js -->
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js"></script>
+
+<!-- TFJS Pose Detection Model -->
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@3.6.0"></script>
+
+<!-- MoveNet (bundled inside pose-detection) -->
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.1675469404/pose.js"></script>
 
   <!-- TFJS core + backends + pose-detection -->
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core@4.23.0/dist/tf-core.min.js"></script>
@@ -15,14 +24,13 @@
   <!-- Pose Detection -->
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@0.0.8/dist/pose-detection.min.js"></script>
 
-  <!-- Optional: mediapipe (not required for MoveNet but safe to include) -->
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.1646424915/pose.js"></script>
 </head>
 <body>
   <main class="page">
     <header class="header">
       <h1>Ergonomic Assessment</h1>
-      <p class="muted">MoveNet Thunder — higher accuracy for posture assessment</p>
+      <p class="muted">MoveNet Thunder for posture assessment</p>
     </header>
 
     <section class="step step-upload">
