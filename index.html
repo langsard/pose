@@ -3,80 +3,83 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Ergonomic Assessment (MoveNet Thunder)</title>
+  <title>ErgoPose — Single/Advanced (photo or video)</title>
+  <link rel="stylesheet" href="styles.css" />
 
-  <link rel="stylesheet" href="style.css">
-
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.21.0"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection"></script>
-
+  <!-- TensorFlow.js + Pose Detection -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@3.6.0"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.1675469404/pose.js"></script>
 </head>
 <body>
-  <main class="page">
-    <header class="header">
-      <h1>Ergonomic Assessment</h1>
-      <p class="muted">MoveNet Thunder for posture assessment</p>
-    </header>
+  <div class="container">
+    <h1>ErgoPose — Photo / Video Ergonomic Sampler</h1>
 
-    <section class="step step-upload">
-      <h2><strong>Step 1:</strong> Add photo</h2>
-
-      <div class="views-row">
-        <!-- FRONT PREVIEW -->
-        <div class="view-card">
-          <div class="box-label">Front view</div>
-
-          <div class="image-box" id="frontPreviewBox">
-            <img id="frontPreviewImg" alt="front sample" src="examples/front.png">
-          </div>
-
-          <input type="file" id="frontInput" accept="image/*" />
-        </div>
-
-        <!-- SIDE PREVIEW -->
-        <div class="view-card">
-          <div class="box-label">Side view</div>
-
-          <div class="image-box" id="sidePreviewBox">
-            <img id="sidePreviewImg" alt="side sample" src="examples/side.png">
-          </div>
-
-          <input type="file" id="sideInput" accept="image/*" />
-        </div>
-      </div>
-    </section>
-
-    <section class="step step-run">
-      <h2><strong>Step 2:</strong> Get result</h2>
-
-      <div class="controls">
-        <button id="runBtn" class="btn-primary" disabled>Run</button>
-        <div id="modelStatus" class="muted">Loading model...</div>
+    <div class="controls">
+      <div class="row">
+        <label>Input (photo or video):</label>
+        <input id="fileA" type="file" accept="image/*,video/*" />
       </div>
 
-      <div class="views-row" style="margin-top:18px;">
-        <div class="result-card">
-          <div class="box-label">Front result</div>
-          <div class="image-box result-box" id="frontResultBox"></div>
-        </div>
+      <div class="row">
+        <label>Sampling (sec) — video only:</label>
+        <select id="sampling">
+          <option value="5">5</option>
+          <option value="10">10</option>
+          <option value="30" selected>30</option>
+          <option value="60">60</option>
+        </select>
 
-        <div class="result-card">
-          <div class="box-label">Side result</div>
-          <div class="image-box result-box" id="sideResultBox"></div>
+        <label style="margin-left:18px;">
+          <input id="advToggle" type="checkbox" />
+          Advanced Analysis (2nd view)
+        </label>
+      </div>
+
+      <div id="advancedArea" class="row hidden">
+        <label>Second input (front/side):</label>
+        <input id="fileB" type="file" accept="image/*,video/*" />
+        <label style="margin-left:12px;">First is:
+          <select id="viewRole">
+            <option value="front">Front</option>
+            <option value="side">Side</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="row">
+        <button id="runBtn" disabled>Run Detection</button>
+        <span id="status" class="status">Loading model...</span>
+      </div>
+    </div>
+
+    <hr />
+
+    <div id="previewArea" class="grid">
+      <div class="box">
+        <h3>Input A Preview</h3>
+        <div class="media-box">
+          <video id="videoA" class="media" controls></video>
+          <img id="imgA" class="media" />
         </div>
       </div>
-    </section>
 
-    <section class="step step-table">
-      <h2>Keypoints & Coordinates</h2>
-      <div id="resultsTable"></div>
-      <div id="anglesSummary" style="margin-top:12px;"></div>
-    </section>
+      <div id="boxB" class="box hidden">
+        <h3>Input B Preview</h3>
+        <div class="media-box">
+          <video id="videoB" class="media" controls></video>
+          <img id="imgB" class="media" />
+        </div>
+      </div>
+    </div>
 
-    <footer class="footer muted" style="text-align:center;margin-top:18px;">
-      Example images: <code>examples/front.png</code> and <code>examples/side.png</code>.
-    </footer>
-  </main>
+    <hr />
+
+    <div id="resultsContainer">
+      <h2>Samples & Results</h2>
+      <div id="samplesGrid" class="samples-grid"></div>
+    </div>
+  </div>
 
   <script src="app.js"></script>
 </body>
