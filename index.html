@@ -77,21 +77,36 @@
     </section>
 
     <!-- STEP 3 -->
-    <section class="step step-run">
-      <h2><strong>Step 3:</strong> Get result</h2>
+<section class="step step-run">
+  <h2><strong>Step 3:</strong> Get result</h2>
 
-      <div class="controls">
-        <button id="runBtn" class="btn-primary" disabled>Run</button>
-        <div id="modelStatus" class="muted">Loading model...</div>
-      </div>
+  <div class="controls">
+    <button id="runBtn" class="btn-primary" disabled>Run</button>
+    <div id="modelStatus" class="muted">Loading model...</div>
+  </div>
 
-      <div class="views-row" style="margin-top:18px;">
-        <div class="result-card">
-          <div class="box-label">Result</div>
-          <div class="image-box result-box" id="resultBox"></div>
-        </div>
-      </div>
-    </section>
+  <!-- NORMAL MODE RESULT -->
+  <div class="views-row normal-only" style="margin-top:18px;">
+    <div class="result-card single">
+      <div class="box-label">Result</div>
+      <div class="image-box result-box" id="normalResultBox"></div>
+    </div>
+  </div>
+
+  <!-- ADVANCE MODE RESULT -->
+  <div class="views-row advance-only" style="margin-top:18px;">
+    <div class="result-card">
+      <div class="box-label">Front result</div>
+      <div class="image-box result-box" id="frontResultBox"></div>
+    </div>
+
+    <div class="result-card">
+      <div class="box-label">Side result</div>
+      <div class="image-box result-box" id="sideResultBox"></div>
+    </div>
+  </div>
+</section>
+
 
     <section class="step step-table">
       <h2>Keypoints & Coordinates</h2>
