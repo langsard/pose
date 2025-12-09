@@ -1,86 +1,135 @@
-<!doctype html>
+<!doctype html> 
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>ErgoPose — Single/Advanced (photo or video)</title>
-  <link rel="stylesheet" href="styles.css" />
+  <title>Ergonomic Assessment (MoveNet Thunder)</title>
 
-  <!-- TensorFlow.js + Pose Detection -->
-  
+  <link rel="stylesheet" href="style.css">
+
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.21.0"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection"></script>
-  
 </head>
+
 <body>
-  <div class="container">
-    <h1>ErgoPose — Photo / Video Ergonomic Sampler</h1>
+  <main class="page">
 
-    <div class="controls">
-      <div class="row">
-        <label>Input (photo or video):</label>
-        <input id="fileA" type="file" accept="image/*,video/*" />
+    <header class="header">
+      <h1>Ergonomic Assessment</h1>
+      <p class="muted">MoveNet Thunder for posture assessment</p>
+    </header>
+
+    <!-- STEP 1: MODE SELECT -->
+    <section class="step">
+      <h2><strong>Step 1:</strong> Select mode</h2>
+
+      <div class="controls">
+        <button id="normalModeBtn" class="btn-primary">Normal</button>
+        <button id="advanceModeBtn" class="btn-primary" style="background:#fff;color:#000;border:2px solid #000;">
+          Advance
+        </button>
       </div>
+    </section>
 
-      <div class="row">
-        <label>Sampling (sec) — video only:</label>
-        <select id="sampling">
-          <option value="5">5</option>
-          <option value="10">10</option>
-          <option value="30" selected>30</option>
-          <option value="60">60</option>
-        </select>
+    <!-- STEP 2: UPLOAD -->
+    <section class="step step-upload">
+      <h2><strong>Step 2:</strong> Add photo / video</h2>
 
-        <label style="margin-left:18px;">
-          <input id="advToggle" type="checkbox" />
-          Advanced Analysis (2nd view)
-        </label>
-      </div>
+      <!-- NORMAL MODE (SINGLE INPUT) -->
+      <div id="normalUpload" class="views-row">
+        <div class="view-card">
+          <div class="box-label">Input</div>
 
-      <div id="advancedArea" class="row hidden">
-        <label>Second input (front/side):</label>
-        <input id="fileB" type="file" accept="image/*,video/*" />
-        <label style="margin-left:12px;">First is:
-          <select id="viewRole">
-            <option value="front">Front</option>
-            <option value="side">Side</option>
-          </select>
-        </label>
-      </div>
+          <div class="image-box">
+            <img id="normalPreviewImg" alt="normal sample" src="examples/front.png">
+          </div>
 
-      <div class="row">
-        <button id="runBtn" disabled>Run Detection</button>
-        <span id="status" class="status">Loading model...</span>
-      </div>
-    </div>
-
-    <hr />
-
-    <div id="previewArea" class="grid">
-      <div class="box">
-        <h3>Input A Preview</h3>
-        <div class="media-box">
-          <video id="videoA" class="media" controls></video>
-          <img id="imgA" class="media" />
+          <input type="file" id="normalInput" accept="image/*,video/*" />
         </div>
       </div>
 
-      <div id="boxB" class="box hidden">
-        <h3>Input B Preview</h3>
-        <div class="media-box">
-          <video id="videoB" class="media" controls></video>
-          <img id="imgB" class="media" />
+      <!-- ADVANCE MODE (FRONT + SIDE) -->
+      <div id="advanceUpload" class="views-row" style="display:none;">
+        
+        <!-- FRONT -->
+        <div class="view-card">
+          <div class="box-label">Front view</div>
+
+          <div class="image-box">
+            <img id="frontPreviewImg" alt="front sample" src="examples/front.png">
+          </div>
+
+          <input type="file" id="frontInput" accept="image/*" />
+        </div>
+
+        <!-- SIDE -->
+        <div class="view-card">
+          <div class="box-label">Side view</div>
+
+          <div class="image-box">
+            <img id="sidePreviewImg" alt="side sample" src="examples/side.png">
+          </div>
+
+          <input type="file" id="sideInput" accept="image/*" />
+        </div>
+
+      </div>
+    </section>
+
+    <!-- STEP 3 -->
+    <section class="step step-run">
+      <h2><strong>Step 3:</strong> Get result</h2>
+
+      <div class="controls">
+        <button id="runBtn" class="btn-primary" disabled>Run</button>
+        <div id="modelStatus" class="muted">Loading model...</div>
+      </div>
+
+      <div class="views-row" style="margin-top:18px;">
+        <div class="result-card">
+          <div class="box-label">Result</div>
+          <div class="image-box result-box" id="resultBox"></div>
         </div>
       </div>
-    </div>
+    </section>
 
-    <hr />
+    <section class="step step-table">
+      <h2>Keypoints & Coordinates</h2>
+      <div id="resultsTable"></div>
+      <div id="anglesSummary" style="margin-top:12px;"></div>
+    </section>
 
-    <div id="resultsContainer">
-      <h2>Samples & Results</h2>
-      <div id="samplesGrid" class="samples-grid"></div>
-    </div>
-  </div>
+    <footer class="footer muted" style="text-align:center;margin-top:18px;">
+      IE project 2025
+    </footer>
+
+  </main>
+
+  <!-- MODE TOGGLE LOGIC (UI ONLY) -->
+  <script>
+    const normalBtn = document.getElementById('normalModeBtn');
+    const advanceBtn = document.getElementById('advanceModeBtn');
+    const normalUpload = document.getElementById('normalUpload');
+    const advanceUpload = document.getElementById('advanceUpload');
+
+    normalBtn.onclick = () => {
+      normalUpload.style.display = "flex";
+      advanceUpload.style.display = "none";
+      normalBtn.style.background = "var(--accent)";
+      normalBtn.style.color = "#fff";
+      advanceBtn.style.background = "#fff";
+      advanceBtn.style.color = "#000";
+    };
+
+    advanceBtn.onclick = () => {
+      normalUpload.style.display = "none";
+      advanceUpload.style.display = "flex";
+      advanceBtn.style.background = "var(--accent)";
+      advanceBtn.style.color = "#fff";
+      normalBtn.style.background = "#fff";
+      normalBtn.style.color = "#000";
+    };
+  </script>
 
   <script src="app.js"></script>
 </body>
