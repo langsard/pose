@@ -163,6 +163,21 @@ body{
   border:2px solid #e3e6ef;
 }
 
+/* ------------ MODE DISPLAY CONTROL ------------ */
+
+.normal-only { display: none; }
+.advance-only { display: none; }
+
+body.normal-mode .normal-only { display: flex; }
+body.advance-mode .advance-only { display: flex; }
+
+/* single result should be centered and not half width */
+.result-card.single{
+  flex: 1 1 100%;
+  max-width: 520px;
+}
+
+
 /* ---------------- TABLE ---------------- */
 
 #resultsTable{
