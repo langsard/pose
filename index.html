@@ -31,6 +31,66 @@
       </div>
     </section>
 
+    <!-- check if file uploaded -->
+    <script>
+  const runBtn = document.getElementById("runBtn");
+  const normalInput = document.getElementById("normalInput");
+  const frontInput = document.getElementById("frontInput");
+  const sideInput = document.getElementById("sideInput");
+
+  let currentMode = "normal"; // default
+
+  // Update mode state
+  normalBtn.onclick = () => {
+    currentMode = "normal";
+    normalUpload.style.display = "flex";
+    advanceUpload.style.display = "none";
+
+    normalBtn.style.background = "var(--accent)";
+    normalBtn.style.color = "#fff";
+    advanceBtn.style.background = "#fff";
+    advanceBtn.style.color = "#000";
+
+    checkRunButton();
+  };
+
+  advanceBtn.onclick = () => {
+    currentMode = "advance";
+    normalUpload.style.display = "none";
+    advanceUpload.style.display = "flex";
+
+    advanceBtn.style.background = "var(--accent)";
+    advanceBtn.style.color = "#fff";
+    normalBtn.style.background = "#fff";
+    normalBtn.style.color = "#000";
+
+    checkRunButton();
+  };
+
+  // --- Helper for preview images in inputs ---
+  function isUploaded(fileInputElement) {
+    return fileInputElement.files && fileInputElement.files.length > 0;
+  }
+
+  // --- Enable/disable RUN button ---
+  function checkRunButton() {
+    if (currentMode === "normal") {
+      runBtn.disabled = !isUploaded(normalInput);
+    } else {
+      // Advance mode = both required
+      runBtn.disabled = !(isUploaded(frontInput) && isUploaded(sideInput));
+    }
+  }
+
+  // Listen for file changes
+  normalInput.addEventListener("change", checkRunButton);
+  frontInput.addEventListener("change", checkRunButton);
+  sideInput.addEventListener("change", checkRunButton);
+
+  // Initial state
+  checkRunButton();
+</script>
+
     <!-- STEP 2: UPLOAD -->
     <section class="step step-upload">
       <h2><strong>Step 2:</strong> Add photo / video</h2>
