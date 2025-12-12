@@ -180,31 +180,75 @@
 
   </main>
 
-  <!-- MODE TOGGLE LOGIC (UI ONLY) -->
-  <script>
-    const normalBtn = document.getElementById('normalModeBtn');
-    const advanceBtn = document.getElementById('advanceModeBtn');
-    const normalUpload = document.getElementById('normalUpload');
-    const advanceUpload = document.getElementById('advanceUpload');
+<!-- MODE TOGGLE LOGIC (UI + RUN BTN) -->
+<script>
+  const normalBtn = document.getElementById('normalModeBtn');
+  const advanceBtn = document.getElementById('advanceModeBtn');
+  const normalUpload = document.getElementById('normalUpload');
+  const advanceUpload = document.getElementById('advanceUpload');
 
-    normalBtn.onclick = () => {
-      normalUpload.style.display = "flex";
-      advanceUpload.style.display = "none";
-      normalBtn.style.background = "var(--accent)";
-      normalBtn.style.color = "#fff";
-      advanceBtn.style.background = "#fff";
-      advanceBtn.style.color = "#000";
-    };
+  const runBtn = document.getElementById("runBtn");
 
-    advanceBtn.onclick = () => {
-      normalUpload.style.display = "none";
-      advanceUpload.style.display = "flex";
-      advanceBtn.style.background = "var(--accent)";
-      advanceBtn.style.color = "#fff";
-      normalBtn.style.background = "#fff";
-      normalBtn.style.color = "#000";
-    };
-  </script>
+  const normalInput = document.getElementById("normalInput");
+  const frontInput = document.getElementById("frontInput");
+  const sideInput = document.getElementById("sideInput");
+
+  let currentMode = "normal";
+
+  function activateNormalMode() {
+    currentMode = "normal";
+
+    normalUpload.style.display = "flex";
+    advanceUpload.style.display = "none";
+
+    document.body.classList.add("normal-mode");
+    document.body.classList.remove("advance-mode");
+
+    normalBtn.style.background = "var(--accent)";
+    normalBtn.style.color = "#fff";
+    advanceBtn.style.background = "#fff";
+    advanceBtn.style.color = "#000";
+
+    checkRunButton();
+  }
+
+  function activateAdvanceMode() {
+    currentMode = "advance";
+
+    normalUpload.style.display = "none";
+    advanceUpload.style.display = "flex";
+
+    document.body.classList.add("advance-mode");
+    document.body.classList.remove("normal-mode");
+
+    advanceBtn.style.background = "var(--accent)";
+    advanceBtn.style.color = "#fff";
+    normalBtn.style.background = "#fff";
+    normalBtn.style.color = "#000";
+
+    checkRunButton();
+  }
+
+  // RUN button enable logic
+  function uploaded(el) {
+    return el.files && el.files.length > 0;
+  }
+
+  function checkRunButton() {
+    if (currentMode === "normal") {
+      runBtn.disabled = !uploaded(normalInput);
+    } else {
+      runBtn.disabled = !(uploaded(frontInput) && uploaded(sideInput));
+    }
+  }
+
+  normalInput.addEventListener("change", checkRunButton);
+  frontInput.addEventListener("change", checkRunButton);
+  sideInput.addEventListener("change", checkRunButton);
+
+  // start in normal mode
+  activateNormalMode();
+</script>
 
   <script src="app.js"></script>
 </body>
