@@ -1,17 +1,18 @@
-// app.js (Full finished file)
+// app.js (Full finished file with sampling dropdown + progress bar)
 // Ergonomic Assessment (MoveNet Thunder)
 // Features:
 //  - Normal (single) or Advance (front+side) mode
-//  - Image / Video input (video sampling via prompt; default 60s)
+//  - Image / Video input (video sampling via dropdown if user selected video)
 //  - Pad-to-square without distortion; draw skeleton on padded output(s)
 //  - Integer coords table (Keypoint / Front co-or / Side co-or)
 //  - Angle calculations (elbows, knees), Best-view selection
 //  - Pseudo-3D fusion (simple depth from side.x scaled to front width)
-//  - Progress + Cancel + CSV export
+//  - Progress bar + Cancel + CSV export
 
 /* ========== CONFIG ========== */
 const CONF_THRESHOLD = 0.30; // minimum keypoint score to be considered
 const DEFAULT_SAMPLING_SEC = 60; // seconds per sample for video if user doesn't change
+const SAMPLING_OPTIONS = [5, 10, 30, 60];
 /* ============================ */
 
 /* ========== DOM ========== */
@@ -74,17 +75,6 @@ function el(tag, attrs={}) {
 
 /* sleep */
 const sleep = (ms) => new Promise(r=>setTimeout(r, ms));
-
-/* prompt sampling seconds for videos (fallback to default) */
-async function askSamplingSeconds(defaultSec=DEFAULT_SAMPLING_SEC){
-  try {
-    const raw = prompt(`Enter sampling interval in seconds for video frames (integer). Default ${defaultSec}s:`, `${defaultSec}`);
-    if (!raw) return defaultSec;
-    const n = parseInt(raw,10);
-    if (isNaN(n) || n <= 0) return defaultSec;
-    return n;
-  } catch(e){ return defaultSec; }
-}
 
 /* convert image/video element to a canvas capturing current frame / full image */
 function createCanvasFromImageEl(imgEl){
@@ -378,6 +368,79 @@ async function loadModel(){
 }
 loadModel();
 
+/* ========== UI elements created dynamically: sampling dropdown + progress bar ========== */
+const controlsRowParent = runBtn.parentElement; // row that contains runBtn
+
+// sampling dropdown
+const samplingWrapper = el('div', { id:'samplingWrapper' });
+samplingWrapper.style.display = 'none';
+samplingWrapper.style.alignItems = 'center';
+samplingWrapper.style.gap = '6px';
+samplingWrapper.style.marginRight = '8px';
+samplingWrapper.style.display = 'none'; // hidden by default
+const samplingLabel = el('label', { for:'samplingSelect', text:'Sample:' });
+samplingLabel.style.fontSize = '13px';
+samplingLabel.style.color = 'var(--muted)';
+const samplingSelect = el('select', { id:'samplingSelect' });
+SAMPLING_OPTIONS.forEach(opt=>{
+  const o = document.createElement('option');
+  o.value = opt;
+  o.textContent = `${opt}s`;
+  if(opt === DEFAULT_SAMPLING_SEC) o.selected = true;
+  samplingSelect.appendChild(o);
+});
+samplingWrapper.appendChild(samplingLabel);
+samplingWrapper.appendChild(samplingSelect);
+// insert samplingWrapper before runBtn
+controlsRowParent.insertBefore(samplingWrapper, runBtn);
+
+// progress bar container
+const progressContainer = el('div', { id:'progressContainer' });
+progressContainer.style.display = 'none';
+progressContainer.style.width = '100%';
+progressContainer.style.marginTop = '10px';
+progressContainer.style.alignItems = 'center';
+progressContainer.style.gap = '8px';
+
+// inner bar + label
+const progressBarBg = el('div', { id:'progressBarBg' });
+progressBarBg.style.width = '100%';
+progressBarBg.style.height = '10px';
+progressBarBg.style.background = '#eee';
+progressBarBg.style.borderRadius = '6px';
+progressBarBg.style.overflow = 'hidden';
+const progressBarFill = el('div', { id:'progressBarFill' });
+progressBarFill.style.width = '0%';
+progressBarFill.style.height = '100%';
+progressBarFill.style.background = 'linear-gradient(90deg,#4b6cff,#6fc1ff)';
+progressBarFill.style.transition = 'width 150ms linear';
+progressBarBg.appendChild(progressBarFill);
+const progressLabel = el('div', { id:'progressLabel', text: '0%' });
+progressLabel.style.marginLeft = '8px';
+progressLabel.style.fontSize = '13px';
+progressLabel.style.minWidth = '48px';
+progressLabel.style.color = 'var(--muted)';
+
+progressContainer.appendChild(progressBarBg);
+progressContainer.appendChild(progressLabel);
+
+// insert progressContainer after controlsRowParent (i.e. below run & buttons)
+controlsRowParent.parentElement.insertBefore(progressContainer, controlsRowParent.nextSibling);
+
+/* helper to show/hide sampling UI based on current file selections */
+function updateSamplingVisibility(){
+  const anyVideo = (currentMode === 'normal' && normalInput.files && normalInput.files.length > 0 && normalInput.files[0].type.startsWith('video/'))
+                || (currentMode === 'advance' && (
+                     (frontInput.files && frontInput.files.length>0 && frontInput.files[0].type.startsWith('video/'))
+                  || (sideInput.files && sideInput.files.length>0 && sideInput.files[0].type.startsWith('video/'))
+                   ));
+  if(anyVideo){
+    samplingWrapper.style.display = 'flex';
+  } else {
+    samplingWrapper.style.display = 'none';
+  }
+}
+
 /* ========== UI: Mode toggle & preview wiring ========== */
 function activateNormalMode(){
   currentMode = 'normal';
@@ -388,6 +451,7 @@ function activateNormalMode(){
   advanceModeBtn.style.background = '#fff'; advanceModeBtn.style.color = '#000';
   // disable run until file chosen (HTML already has run button logic; we'll re-run check)
   checkRunEnable();
+  updateSamplingVisibility();
 }
 function activateAdvanceMode(){
   currentMode = 'advance';
@@ -397,6 +461,7 @@ function activateAdvanceMode(){
   advanceModeBtn.style.background = 'var(--accent)'; advanceModeBtn.style.color = '#fff';
   normalModeBtn.style.background = '#fff'; normalModeBtn.style.color = '#000';
   checkRunEnable();
+  updateSamplingVisibility();
 }
 
 normalModeBtn.addEventListener('click', activateNormalMode);
@@ -409,6 +474,7 @@ function setPreviewFromFileInput(fileInput, previewImgEl){
   if(!f) return;
   const url = URL.createObjectURL(f);
   previewImgEl.src = url;
+  updateSamplingVisibility();
 }
 
 /* Check whether run button should be enabled (simple: require uploaded files) */
@@ -422,6 +488,7 @@ function checkRunEnable(){
       sideInput.files && sideInput.files.length > 0
     );
   }
+  updateSamplingVisibility();
 }
 normalInput.addEventListener('change', ()=>{ setPreviewFromFileInput(normalInput, document.getElementById('normalPreviewImg')); checkRunEnable(); });
 frontInput.addEventListener('change', ()=>{ setPreviewFromFileInput(frontInput, document.getElementById('frontPreviewImg')); checkRunEnable(); });
@@ -462,6 +529,11 @@ runBtn.addEventListener('click', async () => {
     csvBtn.onclick = ()=>{ if(latestResults && latestResults.length) createCSVDownload(latestResults); else alert('No results to export'); };
     controlsRow.appendChild(csvBtn);
   }
+
+  // show progress bar
+  progressBarFill.style.width = '0%';
+  progressLabel.textContent = '0%';
+  progressContainer.style.display = 'flex';
 
   // UI feedback
   modelStatus.textContent = 'Running detection...';
@@ -519,16 +591,22 @@ runBtn.addEventListener('click', async () => {
     alert('Failed to prepare inputs. See console.');
     runBtn.disabled = false;
     cancelBtn.remove();
+    progressContainer.style.display = 'none';
     return;
   }
 
   // determine timestamps to sample
   let samplingSec = DEFAULT_SAMPLING_SEC;
-  // If any involved input is video, ask user for sampling seconds
+  // If any involved input is video, prefer dropdown value if visible otherwise fallback
   const anyVideo = (inputA && inputA.kind === 'video') || (inputB && inputB.kind === 'video');
   if(anyVideo){
-    samplingSec = await askSamplingSeconds(DEFAULT_SAMPLING_SEC);
-    if(!samplingSec || typeof samplingSec !== 'number' || samplingSec <= 0) samplingSec = DEFAULT_SAMPLING_SEC;
+    // use samplingSelect value if present and visible
+    if(samplingWrapper.style.display !== 'none'){
+      const v = parseInt(samplingSelect.value, 10);
+      samplingSec = (!isNaN(v) && v>0) ? v : DEFAULT_SAMPLING_SEC;
+    } else {
+      samplingSec = DEFAULT_SAMPLING_SEC;
+    }
   }
 
   // compute timestamps
@@ -565,6 +643,11 @@ runBtn.addEventListener('click', async () => {
   for(let si=0; si<timestamps.length; si++){
     if(cancelRequested) break;
     const t = timestamps[si];
+
+    // update progress UI
+    const percent = Math.round(((si) / Math.max(1, timestamps.length)) * 100);
+    progressBarFill.style.width = `${percent}%`;
+    progressLabel.textContent = `${percent}%`;
     modelStatus.textContent = `Processing sample ${si+1}/${timestamps.length} (t=${Math.round(t)}s)...`;
 
     // prepare front and side canvas (padded)
@@ -731,6 +814,10 @@ runBtn.addEventListener('click', async () => {
     await sleep(40);
   } // end for timestamps
 
+  // final progress = 100% if not cancelled
+  progressBarFill.style.width = '100%';
+  progressLabel.textContent = '100%';
+
   // finished or cancelled
   if(cancelRequested) modelStatus.textContent = 'Cancelled';
   else modelStatus.textContent = `Done: ${results.length} sample(s) processed.`;
@@ -776,6 +863,8 @@ runBtn.addEventListener('click', async () => {
     if(cb){ cb.textContent = 'Done'; cb.disabled = true; setTimeout(()=>cb.remove(),2000); }
   }
   modelStatus.textContent = 'Idle.';
+  // hide progress after a short pause so user can see 100%
+  setTimeout(()=>{ progressContainer.style.display = 'none'; progressBarFill.style.width = '0%'; progressLabel.textContent = '0%'; }, 700);
 });
 
 /* allow CSV export access */
