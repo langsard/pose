@@ -1,6 +1,3 @@
-/* =========================================================
-   BOOT CHECK
-========================================================= */
 console.log("app.js loaded");
 
 /* =========================================================
@@ -11,51 +8,49 @@ let detector = null;
 let modelReady = false;
 let modelLoading = false;
 
-let currentMode = "normal"; // "normal" | "advance"
+let currentMode = "normal";
 const MIN_CONFIDENCE = 0.4;
 
 /* =========================================================
-   DOM ELEMENTS (MATCH index.html EXACTLY)
+   DOM ELEMENTS (MATCH index.html)
 ========================================================= */
 
-// mode buttons
 const normalModeBtn = document.getElementById("normalModeBtn");
 const advanceModeBtn = document.getElementById("advanceModeBtn");
 
-// sections
 const normalSection = document.getElementById("normalUpload");
 const advanceSection = document.getElementById("advanceUpload");
 
-// inputs
 const normalInput = document.getElementById("normalInput");
 const frontInput = document.getElementById("frontInput");
 const sideInput = document.getElementById("sideInput");
 
-// run + status
+const normalPreviewImg = document.getElementById("normalPreviewImg");
+const frontPreviewImg = document.getElementById("frontPreviewImg");
+const sidePreviewImg = document.getElementById("sidePreviewImg");
+
 const runBtn = document.getElementById("runBtn");
 const statusText = document.getElementById("statusText");
 
-// canvas
 const canvas = document.getElementById("poseCanvas");
 const ctx = canvas.getContext("2d");
 
 /* =========================================================
-   HARD DOM VALIDATION (FAIL FAST)
+   FAIL FAST IF HTML CHANGES
 ========================================================= */
 
-const required = [
+[
   normalModeBtn, advanceModeBtn,
   normalSection, advanceSection,
   normalInput, frontInput, sideInput,
+  normalPreviewImg, frontPreviewImg, sidePreviewImg,
   runBtn, statusText, canvas
-];
-
-if (required.some(el => el === null)) {
-  throw new Error("Critical DOM element missing. Check index.html IDs.");
-}
+].forEach(el => {
+  if (!el) throw new Error("Missing DOM element. Check index.html IDs.");
+});
 
 /* =========================================================
-   STATUS HELPERS
+   STATUS
 ========================================================= */
 
 function setStatus(msg) {
@@ -63,12 +58,10 @@ function setStatus(msg) {
 }
 
 /* =========================================================
-   MODE MANAGEMENT (SINGLE AUTHORITY)
+   MODE MANAGEMENT
 ========================================================= */
 
 function setMode(mode) {
-  if (mode !== "normal" && mode !== "advance") return;
-
   currentMode = mode;
 
   normalSection.style.display = mode === "normal" ? "flex" : "none";
@@ -91,7 +84,7 @@ normalModeBtn.onclick = () => setMode("normal");
 advanceModeBtn.onclick = () => setMode("advance");
 
 /* =========================================================
-   RUN BUTTON ENABLE LOGIC
+   RUN BUTTON LOGIC
 ========================================================= */
 
 function hasFile(input) {
@@ -106,12 +99,38 @@ function checkRunAvailability() {
   }
 }
 
-normalInput.onchange = checkRunAvailability;
-frontInput.onchange = checkRunAvailability;
-sideInput.onchange = checkRunAvailability;
+normalInput.onchange = () => {
+  previewFile(normalInput, normalPreviewImg);
+  checkRunAvailability();
+};
+
+frontInput.onchange = () => {
+  previewFile(frontInput, frontPreviewImg);
+  checkRunAvailability();
+};
+
+sideInput.onchange = () => {
+  previewFile(sideInput, sidePreviewImg);
+  checkRunAvailability();
+};
 
 /* =========================================================
-   MODEL LOADING (ONE TIME, GUARDED)
+   FILE PREVIEW (IMAGE OR VIDEO)
+========================================================= */
+
+function previewFile(input, imgEl) {
+  const file = input.files[0];
+  if (!file) return;
+
+  if (file.type.startsWith("image")) {
+    imgEl.src = URL.createObjectURL(file);
+  } else if (file.type.startsWith("video")) {
+    imgEl.src = "examples/video_placeholder.png"; // optional
+  }
+}
+
+/* =========================================================
+   MODEL LOADING
 ========================================================= */
 
 async function loadModel() {
@@ -138,7 +157,7 @@ async function loadModel() {
 loadModel();
 
 /* =========================================================
-   SAFE POSE UTILITIES
+   POSE HELPERS
 ========================================================= */
 
 function getJoint(keypoints, index) {
@@ -156,7 +175,7 @@ function calculateAngle(a, b, c) {
   const magAB = Math.hypot(ab.x, ab.y);
   const magCB = Math.hypot(cb.x, cb.y);
 
-  if (magAB === 0 || magCB === 0) return "N/A";
+  if (!magAB || !magCB) return "N/A";
 
   const dot = ab.x * cb.x + ab.y * cb.y;
   const angle = Math.acos(dot / (magAB * magCB)) * (180 / Math.PI);
@@ -165,63 +184,87 @@ function calculateAngle(a, b, c) {
 }
 
 /* =========================================================
-   DRAWING
+   DRAWING (MATCH PREVIEW BOX SIZE)
 ========================================================= */
 
-function drawKeypoints(keypoints) {
+function drawToCanvas(sourceEl, keypoints) {
+  const rect = sourceEl.getBoundingClientRect();
+
+  canvas.width = rect.width;
+  canvas.height = rect.height;
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(sourceEl, 0, 0, canvas.width, canvas.height);
+
   ctx.fillStyle = "red";
+
   keypoints.forEach(kp => {
     if (kp.score >= MIN_CONFIDENCE) {
       ctx.beginPath();
-      ctx.arc(kp.x, kp.y, 4, 0, Math.PI * 2);
+      ctx.arc(
+        kp.x / sourceEl.naturalWidth * canvas.width,
+        kp.y / sourceEl.naturalHeight * canvas.height,
+        4, 0, Math.PI * 2
+      );
       ctx.fill();
     }
   });
 }
 
 /* =========================================================
-   CORE ANALYSIS
+   IMAGE ANALYSIS
 ========================================================= */
 
-async function analyzeImage(img) {
-  if (!modelReady) {
-    setStatus("Model not ready");
-    return;
-  }
-
-  canvas.width = img.width;
-  canvas.height = img.height;
-  ctx.drawImage(img, 0, 0);
+async function analyzeImage(imgEl) {
+  if (!modelReady) return setStatus("Model not ready");
 
   setStatus("Analyzing posture...");
 
-  try {
-    const poses = await detector.estimatePoses(img);
-    if (!poses.length) {
-      setStatus("No person detected");
-      return;
-    }
+  const poses = await detector.estimatePoses(imgEl);
+  if (!poses.length) return setStatus("No person detected");
 
-    const keypoints = poses[0].keypoints;
-    drawKeypoints(keypoints);
+  const keypoints = poses[0].keypoints;
+  drawToCanvas(imgEl, keypoints);
 
-    // example: left elbow
-    const shoulder = getJoint(keypoints, 5);
-    const elbow = getJoint(keypoints, 7);
-    const wrist = getJoint(keypoints, 9);
+  const shoulder = getJoint(keypoints, 5);
+  const elbow = getJoint(keypoints, 7);
+  const wrist = getJoint(keypoints, 9);
 
-    const angle = calculateAngle(shoulder, elbow, wrist);
+  const angle = calculateAngle(shoulder, elbow, wrist);
 
-    setStatus(
-      angle === "N/A"
-        ? "Elbow angle: N/A (low confidence)"
-        : `Elbow angle: ${angle}°`
-    );
+  setStatus(
+    angle === "N/A"
+      ? "Elbow angle: N/A (low confidence)"
+      : `Elbow angle: ${angle}°`
+  );
+}
 
-  } catch (err) {
-    console.error(err);
-    setStatus("Analysis failed");
-  }
+/* =========================================================
+   VIDEO ANALYSIS (MIDDLE FRAME)
+========================================================= */
+
+async function analyzeVideo(file, previewImg) {
+  const video = document.createElement("video");
+  video.src = URL.createObjectURL(file);
+  video.muted = true;
+
+  await video.play();
+  video.pause();
+
+  video.currentTime = video.duration / 2;
+
+  await new Promise(r => video.onseeked = r);
+
+  const tempCanvas = document.createElement("canvas");
+  tempCanvas.width = video.videoWidth;
+  tempCanvas.height = video.videoHeight;
+
+  const tempCtx = tempCanvas.getContext("2d");
+  tempCtx.drawImage(video, 0, 0);
+
+  const img = new Image();
+  img.src = tempCanvas.toDataURL();
+  img.onload = () => analyzeImage(img);
 }
 
 /* =========================================================
@@ -229,15 +272,20 @@ async function analyzeImage(img) {
 ========================================================= */
 
 runBtn.onclick = () => {
-  if (currentMode === "normal" && hasFile(normalInput)) {
-    const img = new Image();
-    img.src = URL.createObjectURL(normalInput.files[0]);
-    img.onload = () => analyzeImage(img);
+  if (currentMode === "normal") {
+    const file = normalInput.files[0];
+    if (!file) return;
+
+    if (file.type.startsWith("image")) {
+      analyzeImage(normalPreviewImg);
+    } else if (file.type.startsWith("video")) {
+      analyzeVideo(file, normalPreviewImg);
+    }
   }
 };
 
 /* =========================================================
-   INITIAL STATE
+   INIT
 ========================================================= */
 
 setMode("normal");
