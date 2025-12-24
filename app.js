@@ -1,75 +1,124 @@
+/* =========================================================
+   BOOT CHECK
+========================================================= */
 console.log("app.js loaded");
+
 /* =========================================================
    GLOBAL STATE
 ========================================================= */
 
 let detector = null;
-let modelLoading = false;
 let modelReady = false;
+let modelLoading = false;
 
-let currentMode = "normal"; // "normal" | "advanced"
-
+let currentMode = "normal"; // "normal" | "advance"
 const MIN_CONFIDENCE = 0.4;
 
 /* =========================================================
-   DOM ELEMENTS (DECLARE ONCE)
+   DOM ELEMENTS (MATCH index.html EXACTLY)
 ========================================================= */
 
+// mode buttons
+const normalModeBtn = document.getElementById("normalModeBtn");
+const advanceModeBtn = document.getElementById("advanceModeBtn");
+
+// sections
+const normalSection = document.getElementById("normalUpload");
+const advanceSection = document.getElementById("advanceUpload");
+
+// inputs
+const normalInput = document.getElementById("normalInput");
+const frontInput = document.getElementById("frontInput");
+const sideInput = document.getElementById("sideInput");
+
+// run + status
+const runBtn = document.getElementById("runBtn");
 const statusText = document.getElementById("statusText");
 
-const normalModeBtn = document.getElementById("normalModeBtn");
-const advancedModeBtn = document.getElementById("advancedModeBtn");
-
-const normalSection = document.getElementById("normalSection");
-const advancedSection = document.getElementById("advancedSection");
-
-const normalUpload = document.getElementById("normalUpload");
-const advancedFrontUpload = document.getElementById("advancedFrontUpload");
-const advancedSideUpload = document.getElementById("advancedSideUpload");
-
+// canvas
 const canvas = document.getElementById("poseCanvas");
 const ctx = canvas.getContext("2d");
 
 /* =========================================================
-   STATUS & UI HELPERS
+   HARD DOM VALIDATION (FAIL FAST)
 ========================================================= */
 
-function showStatus(message) {
-  if (statusText) statusText.textContent = message;
-}
+const required = [
+  normalModeBtn, advanceModeBtn,
+  normalSection, advanceSection,
+  normalInput, frontInput, sideInput,
+  runBtn, statusText, canvas
+];
 
-function resetResults() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  showStatus("Ready");
+if (required.some(el => el === null)) {
+  throw new Error("Critical DOM element missing. Check index.html IDs.");
 }
 
 /* =========================================================
-   MODE MANAGEMENT (SINGLE SOURCE OF TRUTH)
+   STATUS HELPERS
+========================================================= */
+
+function setStatus(msg) {
+  statusText.textContent = msg;
+}
+
+/* =========================================================
+   MODE MANAGEMENT (SINGLE AUTHORITY)
 ========================================================= */
 
 function setMode(mode) {
-  if (mode !== "normal" && mode !== "advanced") return;
+  if (mode !== "normal" && mode !== "advance") return;
 
   currentMode = mode;
 
-  normalSection.style.display = mode === "normal" ? "block" : "none";
-  advancedSection.style.display = mode === "advanced" ? "block" : "none";
+  normalSection.style.display = mode === "normal" ? "flex" : "none";
+  advanceSection.style.display = mode === "advance" ? "flex" : "none";
 
-  resetResults();
+  normalModeBtn.style.background =
+    mode === "normal" ? "var(--accent)" : "#fff";
+  normalModeBtn.style.color =
+    mode === "normal" ? "#fff" : "#000";
+
+  advanceModeBtn.style.background =
+    mode === "advance" ? "var(--accent)" : "#fff";
+  advanceModeBtn.style.color =
+    mode === "advance" ? "#fff" : "#000";
+
+  checkRunAvailability();
 }
 
 normalModeBtn.onclick = () => setMode("normal");
-advancedModeBtn.onclick = () => setMode("advanced");
+advanceModeBtn.onclick = () => setMode("advance");
 
 /* =========================================================
-   MODEL LOADING (ONE-TIME, GUARDED)
+   RUN BUTTON ENABLE LOGIC
 ========================================================= */
 
-async function loadPoseModel() {
+function hasFile(input) {
+  return input.files && input.files.length > 0;
+}
+
+function checkRunAvailability() {
+  if (currentMode === "normal") {
+    runBtn.disabled = !hasFile(normalInput);
+  } else {
+    runBtn.disabled = !(hasFile(frontInput) && hasFile(sideInput));
+  }
+}
+
+normalInput.onchange = checkRunAvailability;
+frontInput.onchange = checkRunAvailability;
+sideInput.onchange = checkRunAvailability;
+
+/* =========================================================
+   MODEL LOADING (ONE TIME, GUARDED)
+========================================================= */
+
+async function loadModel() {
   if (modelReady || modelLoading) return;
 
   modelLoading = true;
-  showStatus("Loading pose model...");
+  setStatus("Loading pose model...");
 
   try {
     detector = await poseDetection.createDetector(
@@ -77,16 +126,16 @@ async function loadPoseModel() {
       { modelType: poseDetection.movenet.modelType.SINGLEPOSE_THUNDER }
     );
     modelReady = true;
-    showStatus("Model ready");
+    setStatus("Model ready");
   } catch (err) {
-    console.error("Model load failed:", err);
-    showStatus("Failed to load pose model");
+    console.error(err);
+    setStatus("Model failed to load");
   } finally {
     modelLoading = false;
   }
 }
 
-loadPoseModel();
+loadModel();
 
 /* =========================================================
    SAFE POSE UTILITIES
@@ -98,7 +147,7 @@ function getJoint(keypoints, index) {
   return kp;
 }
 
-function calculateAngleSafe(a, b, c) {
+function calculateAngle(a, b, c) {
   if (!a || !b || !c) return "N/A";
 
   const ab = { x: a.x - b.x, y: a.y - b.y };
@@ -116,14 +165,11 @@ function calculateAngleSafe(a, b, c) {
 }
 
 /* =========================================================
-   DRAWING (CONFIDENCE-AWARE)
+   DRAWING
 ========================================================= */
 
-function drawSkeleton(keypoints) {
+function drawKeypoints(keypoints) {
   ctx.fillStyle = "red";
-  ctx.strokeStyle = "lime";
-  ctx.lineWidth = 2;
-
   keypoints.forEach(kp => {
     if (kp.score >= MIN_CONFIDENCE) {
       ctx.beginPath();
@@ -134,70 +180,64 @@ function drawSkeleton(keypoints) {
 }
 
 /* =========================================================
-   CORE ANALYSIS (SAFE ENTRY)
+   CORE ANALYSIS
 ========================================================= */
 
-async function analyzeImage(image) {
+async function analyzeImage(img) {
   if (!modelReady) {
-    showStatus("Model not ready");
+    setStatus("Model not ready");
     return;
   }
 
-  showStatus("Analyzing posture...");
+  canvas.width = img.width;
+  canvas.height = img.height;
+  ctx.drawImage(img, 0, 0);
+
+  setStatus("Analyzing posture...");
 
   try {
-    canvas.width = image.width;
-    canvas.height = image.height;
-    ctx.drawImage(image, 0, 0);
-
-    const poses = await detector.estimatePoses(image);
-
-    if (!poses || poses.length === 0) {
-      showStatus("No person detected");
+    const poses = await detector.estimatePoses(img);
+    if (!poses.length) {
+      setStatus("No person detected");
       return;
     }
 
     const keypoints = poses[0].keypoints;
-    drawSkeleton(keypoints);
+    drawKeypoints(keypoints);
 
-    // Example: left elbow
+    // example: left elbow
     const shoulder = getJoint(keypoints, 5);
     const elbow = getJoint(keypoints, 7);
     const wrist = getJoint(keypoints, 9);
 
-    const elbowAngle = calculateAngleSafe(shoulder, elbow, wrist);
+    const angle = calculateAngle(shoulder, elbow, wrist);
 
-    showStatus(
-      elbowAngle === "N/A"
+    setStatus(
+      angle === "N/A"
         ? "Elbow angle: N/A (low confidence)"
-        : `Elbow angle: ${elbowAngle}°`
+        : `Elbow angle: ${angle}°`
     );
 
   } catch (err) {
-    console.error("Analysis failed:", err);
-    showStatus("Analysis error");
+    console.error(err);
+    setStatus("Analysis failed");
   }
 }
 
 /* =========================================================
-   FILE INPUT HANDLERS (HARDENED)
+   RUN BUTTON
 ========================================================= */
 
-normalUpload.onchange = () => {
-  if (!normalUpload.files || normalUpload.files.length === 0) return;
-
-  const img = new Image();
-  img.src = URL.createObjectURL(normalUpload.files[0]);
-
-  img.onload = () => analyzeImage(img);
+runBtn.onclick = () => {
+  if (currentMode === "normal" && hasFile(normalInput)) {
+    const img = new Image();
+    img.src = URL.createObjectURL(normalInput.files[0]);
+    img.onload = () => analyzeImage(img);
+  }
 };
 
-advancedFrontUpload.onchange = () => {
-  if (!advancedFrontUpload.files.length) return;
-  // Placeholder for future advanced logic
-};
+/* =========================================================
+   INITIAL STATE
+========================================================= */
 
-advancedSideUpload.onchange = () => {
-  if (!advancedSideUpload.files.length) return;
-  // Placeholder for future advanced logic
-};
+setMode("normal");
