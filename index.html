@@ -1,4 +1,4 @@
-<!doctype html> 
+<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
@@ -19,99 +19,56 @@
       <p class="muted">MoveNet Thunder CNN model</p>
     </header>
 
-    <!-- STEP 1: MODE SELECT -->
+    <!-- STEP 1 -->
     <section class="step">
       <h2><strong>Step 1:</strong> Select mode</h2>
-
       <div class="controls">
         <button id="normalModeBtn" class="btn-primary">Normal</button>
-        <button id="advanceModeBtn" class="btn-primary" style="background:#fff;color:#000;border:0px solid #000;">
-          Advance
-        </button>
+        <button id="advanceModeBtn" class="btn-primary">Advance</button>
       </div>
     </section>
 
-    <!-- STEP 2: UPLOAD -->
+    <!-- STEP 2 -->
     <section class="step step-upload">
       <h2><strong>Step 2:</strong> Add photo / video</h2>
 
-      <!-- NORMAL MODE (SINGLE INPUT) -->
       <div id="normalUpload" class="views-row">
         <div class="view-card">
           <div class="box-label">Input</div>
-
           <div class="image-box">
-            <img id="normalPreviewImg" alt="normal sample" src="examples/normal sample.png">
+            <img id="normalPreviewImg" src="examples/normal sample.png">
           </div>
-
           <input type="file" id="normalInput" accept="image/*,video/*" />
         </div>
       </div>
 
-      <!-- ADVANCE MODE (FRONT + SIDE) -->
       <div id="advanceUpload" class="views-row" style="display:none;">
-        
-        <!-- FRONT -->
         <div class="view-card">
           <div class="box-label">Front view</div>
-
           <div class="image-box">
-            <img id="frontPreviewImg" alt="front sample" src="examples/front.png">
+            <img id="frontPreviewImg" src="examples/front.png">
           </div>
-
           <input type="file" id="frontInput" accept="image/*" />
         </div>
 
-        <!-- SIDE -->
         <div class="view-card">
           <div class="box-label">Side view</div>
-
           <div class="image-box">
-            <img id="sidePreviewImg" alt="side sample" src="examples/side.png">
+            <img id="sidePreviewImg" src="examples/side.png">
           </div>
-
           <input type="file" id="sideInput" accept="image/*" />
         </div>
-
       </div>
     </section>
 
     <!-- STEP 3 -->
-<section class="step step-run">
-  <h2><strong>Step 3:</strong> Get result</h2>
-
-  <div class="controls">
-    <button id="runBtn" class="btn-primary" disabled>Run</button>
-    <div id="modelStatus" class="muted">Loading model...</div>
-  </div>
-
-  <!-- NORMAL MODE RESULT -->
-  <div class="views-row normal-only" style="margin-top:18px;">
-    <div class="result-card single">
-      <div class="box-label">Result</div>
-      <div class="image-box result-box" id="normalResultBox"></div>
-    </div>
-  </div>
-
-  <!-- ADVANCE MODE RESULT -->
-  <div class="views-row advance-only" style="margin-top:18px;">
-    <div class="result-card">
-      <div class="box-label">Front result</div>
-      <div class="image-box result-box" id="frontResultBox"></div>
-    </div>
-
-    <div class="result-card">
-      <div class="box-label">Side result</div>
-      <div class="image-box result-box" id="sideResultBox"></div>
-    </div>
-  </div>
-</section>
-
-
-    <section class="step step-table">
-      <h2>Keypoints & Coordinates</h2>
-      <div id="resultsTable"></div>
-      <div id="anglesSummary" style="margin-top:12px;"></div>
+    <section class="step step-run">
+      <h2><strong>Step 3:</strong> Get result</h2>
+      <div class="controls">
+        <button id="runBtn" class="btn-primary" disabled>Run</button>
+        <div id="statusText" class="muted">Loading model...</div>
+      </div>
+      <canvas id="poseCanvas"></canvas>
     </section>
 
     <footer class="footer muted" style="text-align:center;margin-top:18px;">
@@ -120,76 +77,7 @@
 
   </main>
 
-<!-- MODE TOGGLE LOGIC (UI + RUN BTN) -->
-<script>
-  const normalBtn = document.getElementById('normalModeBtn');
-  const advanceBtn = document.getElementById('advanceModeBtn');
-  const normalUpload = document.getElementById('normalUpload');
-  const advanceUpload = document.getElementById('advanceUpload');
-
-  const runBtn = document.getElementById("runBtn");
-
-  const normalInput = document.getElementById("normalInput");
-  const frontInput = document.getElementById("frontInput");
-  const sideInput = document.getElementById("sideInput");
-
-  let currentMode = "normal";
-
-  function activateNormalMode() {
-    currentMode = "normal";
-
-    normalUpload.style.display = "flex";
-    advanceUpload.style.display = "none";
-
-    document.body.classList.add("normal-mode");
-    document.body.classList.remove("advance-mode");
-
-    normalBtn.style.background = "var(--accent)";
-    normalBtn.style.color = "#fff";
-    advanceBtn.style.background = "#fff";
-    advanceBtn.style.color = "#000";
-
-    checkRunButton();
-  }
-
-  function activateAdvanceMode() {
-    currentMode = "advance";
-
-    normalUpload.style.display = "none";
-    advanceUpload.style.display = "flex";
-
-    document.body.classList.add("advance-mode");
-    document.body.classList.remove("normal-mode");
-
-    advanceBtn.style.background = "var(--accent)";
-    advanceBtn.style.color = "#fff";
-    normalBtn.style.background = "#fff";
-    normalBtn.style.color = "#000";
-
-    checkRunButton();
-  }
-
-  // RUN button enable logic
-  function uploaded(el) {
-    return el.files && el.files.length > 0;
-  }
-
-  function checkRunButton() {
-    if (currentMode === "normal") {
-      runBtn.disabled = !uploaded(normalInput);
-    } else {
-      runBtn.disabled = !(uploaded(frontInput) && uploaded(sideInput));
-    }
-  }
-
-  normalInput.addEventListener("change", checkRunButton);
-  frontInput.addEventListener("change", checkRunButton);
-  sideInput.addEventListener("change", checkRunButton);
-
-  // start in normal mode
-  activateNormalMode();
-</script>
-
-  <script src="app.js"></script>
+  <!-- IMPORTANT: ONE SCRIPT, ONCE -->
+  <script src="app.js" defer></script>
 </body>
 </html>
