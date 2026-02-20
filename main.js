@@ -3,7 +3,7 @@ import { processVideo } from "./input/videoProcessor.js";
 import { initDetector, detectPose } from "./detection/poseDetector.js";
 import { calculateAngles } from "./measurement/angleCalculator.js";
 import { assessPosture } from "./assessment/ergonomicAssessment.js";
-import { renderPreview, renderResultModal } from "./visualization/renderer.js";
+import { renderPreview, renderResultModal, renderGallery } from "./visualization/renderer.js";
 
 await initDetector();
 
