@@ -54,3 +54,56 @@ export function renderResultModal(source, keypoints, angles, assessment) {
     modal.classList.add("hidden");
   };
 }
+
+export function renderGallery(results) {
+
+  const modal = document.getElementById("resultModal");
+  const canvas = document.getElementById("resultCanvas");
+  const ctx = canvas.getContext("2d");
+  const table = document.getElementById("angleTable");
+
+  let index = 0;
+
+  function showFrame(i) {
+
+    const frame = results[i];
+    const img = new Image();
+
+    img.onload = () => {
+
+      canvas.width = img.width;
+      canvas.height = img.height;
+
+      ctx.drawImage(img, 0, 0);
+
+      table.innerHTML = `
+        <h3>Frame ${i+1} / ${results.length}</h3>
+        ${Object.entries(frame.angles)
+          .map(([k,v]) => `<div>${k}: ${v.toFixed(1)}°</div>`)
+          .join("")}
+        <br>
+        <button id="prevFrame">Previous</button>
+        <button id="nextFrame">Next</button>
+      `;
+
+      document.getElementById("prevFrame").onclick = () => {
+        if (index > 0) {
+          index--;
+          showFrame(index);
+        }
+      };
+
+      document.getElementById("nextFrame").onclick = () => {
+        if (index < results.length - 1) {
+          index++;
+          showFrame(index);
+        }
+      };
+    };
+
+    img.src = frame.image;
+  }
+
+  modal.classList.remove("hidden");
+  showFrame(index);
+}
