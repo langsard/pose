@@ -2,10 +2,27 @@ import { handleInput } from "./input/inputHandler.js";
 import { processVideo } from "./input/videoProcessor.js";
 import { initDetector, detectPose } from "./detection/poseDetector.js";
 import { calculateAngles } from "./measurement/angleCalculator.js";
-import { assessPosture } from "./assessment/ergonomicAssessment.js";
 import { renderPreview, renderResultModal, renderGallery } from "./visualization/renderer.js";
 
 await initDetector();
+
+// Load default preview image
+async function loadDefaultImage() {
+
+  const canvas = document.getElementById("outputCanvas");
+  const defaultPath = canvas.dataset.default;
+
+  if (!defaultPath) return;
+
+  const img = new Image();
+  img.src = defaultPath;
+
+  img.onload = async () => {
+
+    const keypoints = await detectPose(img);
+    renderPreview(img, keypoints);
+  };
+}
 
 async function previewPipeline(media) {
 
@@ -30,31 +47,29 @@ async function runPipeline(media) {
 
     const keypoints = await detectPose(media.data);
     const angles = calculateAngles(keypoints);
-    const assessment = assessPosture(angles);
 
-    renderResultModal(media.data, keypoints, angles, assessment);
+    renderResultModal(media.data, keypoints, angles);
   }
 
-if (media.type === "video") {
+  if (media.type === "video") {
 
-  const galleryResults = [];
+    const galleryResults = [];
 
-  await processVideo(media.data, media.fps, async (frameCanvas) => {
+    await processVideo(media.data, media.fps, async (frameCanvas) => {
 
-    const keypoints = await detectPose(frameCanvas);
-    const angles = calculateAngles(keypoints);
-    const assessment = assessPosture(angles);
+      const keypoints = await detectPose(frameCanvas);
+      const angles = calculateAngles(keypoints);
 
-    galleryResults.push({
-      image: frameCanvas.toDataURL(),
-      keypoints,
-      angles,
-      assessment
+      galleryResults.push({
+        image: frameCanvas.toDataURL(),
+        keypoints,
+        angles
+      });
     });
-  });
 
-  renderGallery(galleryResults);
-}
+    renderGallery(galleryResults);
+  }
 }
 
 handleInput(previewPipeline, runPipeline);
+loadDefaultImage();
