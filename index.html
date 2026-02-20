@@ -1,29 +1,29 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>AI Posture Assessment</title>
 
   <link rel="stylesheet" href="styles/style.css" />
 
-<!-- TensorFlow -->
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.16.0"></script>
-
-<!-- Pose Detection -->
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@2.1.0"></script>
-
+  <!-- TensorFlow Full Bundle -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.16.0"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@2.1.0"></script>
 </head>
 
 <body>
 
-<h1>AI Posture Assessment</h1>
+<div class="app">
 
-<div class="app-container">
+  <h1 class="title">AI Posture Assessment</h1>
 
-  <div class="preview-box">
+  <!-- Preview Area -->
+  <div class="preview-container">
     <canvas id="outputCanvas"></canvas>
   </div>
 
+  <!-- Controls -->
   <div class="controls">
     <input type="file" id="fileInput" hidden />
     <button id="chooseBtn">Choose Image / Video</button>
@@ -31,22 +31,19 @@
   </div>
 
 </div>
-<br><br>
-
-<canvas id="outputCanvas"></canvas>
 
 <!-- Frame Interval Modal -->
 <div id="intervalModal" class="modal hidden">
-  <div class="modal-content">
+  <div class="modal-box">
     <h2>Select Frame Interval (seconds)</h2>
-    <input type="number" id="frameIntervalInput" value="1" min="1" />
+    <input type="number" id="frameIntervalInput" value="1" min="1"/>
     <button id="confirmInterval">Confirm</button>
   </div>
 </div>
 
 <!-- Result Modal -->
 <div id="resultModal" class="modal hidden">
-  <div class="modal-content large-modal">
+  <div class="modal-box large">
     <h2>Posture Assessment Result</h2>
     <canvas id="resultCanvas"></canvas>
     <div id="angleTable"></div>
