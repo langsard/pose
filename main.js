@@ -35,17 +35,26 @@ async function runPipeline(media) {
     renderResultModal(media.data, keypoints, angles, assessment);
   }
 
-  if (media.type === "video") {
+if (media.type === "video") {
 
-    await processVideo(media.data, media.fps, async (frameCanvas) => {
+  const galleryResults = [];
 
-      const keypoints = await detectPose(frameCanvas);
-      const angles = calculateAngles(keypoints);
-      const assessment = assessPosture(angles);
+  await processVideo(media.data, media.fps, async (frameCanvas) => {
 
-      renderResultModal(frameCanvas, keypoints, angles, assessment);
+    const keypoints = await detectPose(frameCanvas);
+    const angles = calculateAngles(keypoints);
+    const assessment = assessPosture(angles);
+
+    galleryResults.push({
+      image: frameCanvas.toDataURL(),
+      keypoints,
+      angles,
+      assessment
     });
-  }
+  });
+
+  renderGallery(galleryResults);
+}
 }
 
 handleInput(previewPipeline, runPipeline);
