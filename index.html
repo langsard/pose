@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>AI Posture Assessment</title>
+
+  <link rel="stylesheet" href="styles/style.css" />
+
+  <!-- TensorFlow + MoveNet -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection"></script>
+</head>
+
+<body>
+
+<h1>AI Posture Assessment</h1>
+
+<input type="file" id="fileInput" hidden />
+<button id="chooseBtn">Choose Image / Video</button>
+<button id="runBtn">Run Full Assessment</button>
+
+<br><br>
+
+<canvas id="outputCanvas"></canvas>
+
+<!-- Frame Interval Modal -->
+<div id="intervalModal" class="modal hidden">
+  <div class="modal-content">
+    <h2>Select Frame Interval (seconds)</h2>
+    <input type="number" id="frameIntervalInput" value="1" min="1" />
+    <button id="confirmInterval">Confirm</button>
+  </div>
+</div>
+
+<!-- Result Modal -->
+<div id="resultModal" class="modal hidden">
+  <div class="modal-content large-modal">
+    <h2>Posture Assessment Result</h2>
+    <canvas id="resultCanvas"></canvas>
+    <div id="angleTable"></div>
+    <button id="closeResult">Close</button>
+  </div>
+</div>
+
+<script type="module" src="main.js"></script>
+
+</body>
+</html>
