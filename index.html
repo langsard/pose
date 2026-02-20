@@ -18,10 +18,19 @@
 
 <h1>AI Posture Assessment</h1>
 
-<input type="file" id="fileInput" hidden />
-<button id="chooseBtn">Choose Image / Video</button>
-<button id="runBtn">Run Full Assessment</button>
+<div class="app-container">
 
+  <div class="preview-box">
+    <canvas id="outputCanvas"></canvas>
+  </div>
+
+  <div class="controls">
+    <input type="file" id="fileInput" hidden />
+    <button id="chooseBtn">Choose Image / Video</button>
+    <button id="runBtn">Run Full Assessment</button>
+  </div>
+
+</div>
 <br><br>
 
 <canvas id="outputCanvas"></canvas>
