@@ -89,14 +89,77 @@ export function renderResultModal(source, keypoints, angles) {
 
   drawSkeleton(ctx, keypoints, angles);
 
+  // ==========================
+  // SIMPLE OWAS CLASSIFICATION
+  // ==========================
+
+  let back = 1;
+  let arms = 1;
+  let legs = 1;
+  let load = 1;
+
+  // ---------- BACK ----------
+
+  const trunkAngle =
+    ((angles.leftHip || 180) +
+     (angles.rightHip || 180)) / 2;
+
+  if (trunkAngle < 150)
+    back = 2;
+
+  // ---------- ARMS ----------
+
+  const leftRaised =
+    keypoints[9]?.y < keypoints[5]?.y;
+
+  const rightRaised =
+    keypoints[10]?.y < keypoints[6]?.y;
+
+  if (leftRaised || rightRaised)
+    arms = 2;
+
+  if (leftRaised && rightRaised)
+    arms = 3;
+
+  // ---------- LEGS ----------
+
+  const leftBent =
+    (angles.leftKnee || 180) < 150;
+
+  const rightBent =
+    (angles.rightKnee || 180) < 150;
+
+  if (leftBent && rightBent)
+    legs = 4;
+
+  // ---------- OWAS CODE ----------
+
+  const owasCode =
+    `${back}${arms}${legs}${load}`;
+
   table.innerHTML = `
+    <h3>OWAS Assessment</h3>
+
+    <div><b>Back:</b> ${back}</div>
+    <div><b>Arms:</b> ${arms}</div>
+    <div><b>Legs:</b> ${legs}</div>
+    <div><b>Load:</b> ${load}</div>
+
+    <div style="margin-top:10px;">
+      <b>OWAS Code: ${owasCode}</b>
+    </div>
+
+    <hr>
+
     <h3>Joint Angles</h3>
+
     ${Object.entries(angles)
-      .map(([k,v]) => `<div>${k}: ${v.toFixed(1)}°</div>`)
+      .map(([k,v]) =>
+        `<div>${k}: ${v.toFixed(1)}°</div>`
+      )
       .join("")}
   `;
 
-  // FIX CLOSE BUTTON
   closeBtn.onclick = () => {
     modal.classList.add("hidden");
   };
@@ -130,16 +193,70 @@ export function renderGallery(results) {
       // REDRAW skeleton and risk colors
       drawSkeleton(ctx, frame.keypoints, frame.angles);
 
-      table.innerHTML = `
-        <h3>Frame ${i+1} / ${results.length}</h3>
-        ${Object.entries(frame.angles)
-          .map(([k,v]) => `<div>${k}: ${v.toFixed(1)}°</div>`)
-          .join("")}
-        <br>
-        <button id="prevFrame">Previous</button>
-        <button id="nextFrame">Next</button>
-      `;
+      table.innerHTML = `// ==========================
+// SIMPLE OWAS CLASSIFICATION
+// ==========================
 
+let back = 1;
+let arms = 1;
+let legs = 1;
+let load = 1;
+
+const trunkAngle =
+  ((frame.angles.leftHip || 180) +
+   (frame.angles.rightHip || 180)) / 2;
+
+if (trunkAngle < 150)
+  back = 2;
+
+const leftRaised =
+  frame.keypoints[9]?.y <
+  frame.keypoints[5]?.y;
+
+const rightRaised =
+  frame.keypoints[10]?.y <
+  frame.keypoints[6]?.y;
+
+if (leftRaised || rightRaised)
+  arms = 2;
+
+if (leftRaised && rightRaised)
+  arms = 3;
+
+const leftBent =
+  (frame.angles.leftKnee || 180) < 150;
+
+const rightBent =
+  (frame.angles.rightKnee || 180) < 150;
+
+if (leftBent && rightBent)
+  legs = 4;
+
+const owasCode =
+  `${back}${arms}${legs}${load}`;
+
+table.innerHTML = `
+  <h3>Frame ${i+1} / ${results.length}</h3>
+
+  <div><b>OWAS Code:</b> ${owasCode}</div>
+  <div>Back: ${back}</div>
+  <div>Arms: ${arms}</div>
+  <div>Legs: ${legs}</div>
+  <div>Load: ${load}</div>
+
+  <hr>
+
+  ${Object.entries(frame.angles)
+    .map(([k,v]) =>
+      `<div>${k}: ${v.toFixed(1)}°</div>`
+    )
+    .join("")}
+
+  <br><br>
+
+  <button id="prevFrame">Previous</button>
+  <button id="nextFrame">Next</button>
+`;
       document.getElementById("prevFrame").onclick = () => {
         if (index > 0) {
           index--;
