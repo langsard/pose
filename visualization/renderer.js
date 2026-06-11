@@ -137,7 +137,7 @@ export function renderResultModal(source, keypoints, angles) {
   const owasCode =
     `${back}${arms}${legs}${load}`;
 
-  table.innerHTML = `
+  table.innerHTML = 
     <h3>OWAS Assessment</h3>
 
     <div><b>Back:</b> ${back}</div>
