@@ -193,10 +193,7 @@ export function renderGallery(results) {
       // REDRAW skeleton and risk colors
       drawSkeleton(ctx, frame.keypoints, frame.angles);
 
-      table.innerHTML = `// ==========================
-// SIMPLE OWAS CLASSIFICATION
-// ==========================
-
+      table.innerHTML = 
 let back = 1;
 let arms = 1;
 let legs = 1;
