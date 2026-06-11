@@ -36,7 +36,7 @@ function drawSkeleton(ctx, keypoints, angles) {
 
   // Draw joints
   keypoints.forEach((kp, index) => {
-    if (kp.score > 0.4) {
+    if (kp.score > 0) {
 
       let color = "green";
 
